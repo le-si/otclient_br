@@ -60,6 +60,7 @@ public:
     virtual void maximize() = 0;
     virtual void poll() = 0;
     virtual void swapBuffers() = 0;
+    virtual void makeCurrent() {}
     virtual void showMouse() = 0;
     virtual void hideMouse() = 0;
     virtual void displayFatalError(const std::string_view /*message*/) {}

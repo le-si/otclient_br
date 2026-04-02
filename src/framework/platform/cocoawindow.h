@@ -25,13 +25,8 @@
 #include "platformwindow.h"
 #include <type_traits>
 
-#ifdef __OBJC__
-@class NSWindow;
-@class NSOpenGLContext;
-#else
-typedef void* NSWindow;
-typedef void* NSOpenGLContext;
-#endif
+// GLFW is used for windowing and OpenGL context on macOS 26+ / Apple Silicon
+// (NSOpenGL was removed in macOS Tahoe)
 
 class CocoaWindow : public PlatformWindow
 {
@@ -49,6 +44,7 @@ public:
     void maximize() override;
     void poll() override;
     void swapBuffers() override;
+    void makeCurrent() override;
     void showMouse() override;
     void hideMouse() override;
 
@@ -67,15 +63,14 @@ public:
     std::string getPlatformType() override { return "Cocoa"; }
 
     void fireInputEvent(const InputEvent& event) { if(m_onInputEvent) m_onInputEvent(event); }
+    void fireCloseRequest() { if(m_onClose) m_onClose(); }
     InputEvent& getInputEvent() { return m_inputEvent; }
 
 protected:
     int internalLoadMouseCursor(const ImagePtr& image, const TPoint<int>& hotSpot) override;
 
 private:
-    void* m_window;
-    void* m_view;
-    void* m_glContext;
-    bool m_mouseVisible;
-    std::vector<void*> m_cursors;
+    void* m_window = nullptr;  ///< GLFWwindow*
+    bool m_mouseVisible = true;
+    std::vector<void*> m_cursors;  ///< GLFWcursor*
 };

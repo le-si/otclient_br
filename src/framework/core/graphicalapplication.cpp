@@ -79,6 +79,7 @@ void GraphicalApplication::init(std::vector<std::string>& args, ApplicationConte
     g_ui.init();
 
     // initialize graphics
+    g_window.makeCurrent();
     g_graphics.init();
     g_drawPool.init(graphicalContext->getSpriteSize());
 

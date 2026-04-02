@@ -1,4 +1,4 @@
-project(otclient)
+project(otclient_native)
 
 # *****************************************************************************
 # Options
@@ -156,8 +156,10 @@ if(APPLE)
   find_library(APPKIT AppKit REQUIRED)
   find_library(QUARTZCORE QuartzCore REQUIRED)
   find_library(MACOS_OPENGL OpenGL REQUIRED)
+  # GLFW replaces NSOpenGL (removed on macOS 26+ / Apple Silicon)
+  find_package(glfw3 REQUIRED)
 endif()
-if(UNIX AND NOT ANDROID AND NOT WASM)
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT WASM)
   find_package(X11 REQUIRED)
 endif()
 if(WIN32)
@@ -795,6 +797,7 @@ else() # Linux
           ${OPENSSL_INCLUDE_DIR}
           ${CPPCODEC_INCLUDE_DIRS}
           ${X11_INCLUDE_DIR}
+          $<$<BOOL:${APPLE}>:/opt/homebrew/include>
   )
   target_link_libraries(otclient_core
           PUBLIC
@@ -803,16 +806,12 @@ else() # Linux
           ${ZLIB_LIBRARY}
           ${NLOHMANN_JSON_LIBRARY}
           ${GLEW_LIBRARY}
-          ${OPENGL_LIBRARIES}
-          ${DirectX_LIBRARY}
-          ${DirectX_LIBRARIES}
           ${OGG_LIBRARY}
           ${VORBISFILE_LIBRARY}
           ${VORBIS_LIBRARY}
           ${GMP_LIBRARY}
           ${STDUUID}
           ${FOUNDATION}
-          ${X11_LIBRARIES}
           ${IOKIT}
           ${APPKIT}
           ${QUARTZCORE}
@@ -823,7 +822,8 @@ else() # Linux
 
           absl::log_internal_check_op
           Threads::Threads
-          X11::X11
+          $<$<NOT:$<BOOL:${APPLE}>>:X11::X11>
+          $<$<NOT:$<BOOL:${APPLE}>>:${X11_LIBRARIES}>
           asio::asio
           OpenAL::OpenAL
           LibLZMA::LibLZMA
@@ -839,6 +839,7 @@ else() # Linux
           Vorbis::vorbis
           Freetype::Freetype
           ${INIREADER_LIBRARY}
+          $<$<BOOL:${APPLE}>:glfw>
   )
 
   if (TOGGLE_FRAMEWORK_PROTOBUF)
@@ -883,14 +884,8 @@ endif()
 # *****************************************************************************
 
 ## Link compilation files to build/bin folder, else link to the main dir
-if (TOGGLE_BIN_FOLDER)
-  set_target_properties(${PROJECT_NAME}
-          PROPERTIES
-          RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-  )
-else()
-  set_target_properties(${PROJECT_NAME}
-          PROPERTIES
-          RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/"
-  )
-endif()
+## Always link compilation files to build/bin folder for consistency on macOS
+set_target_properties(${PROJECT_NAME}
+        PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)

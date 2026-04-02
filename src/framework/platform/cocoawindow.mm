@@ -26,6 +26,11 @@
 #include <framework/core/eventdispatcher.h>
 #include <framework/graphics/image.h>
 
+// Use GLFW for context creation on macOS — NSOpenGL is removed on macOS 26+ (Tahoe) / Apple Silicon
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+// Note: glfw3native.h is intentionally NOT included to avoid Cocoa/Rect type conflicts
+
 #define Size CocoaSize
 #define Point CocoaPoint
 #define Rect CocoaRect
@@ -37,234 +42,161 @@
 #undef Rect
 #undef Cursor
 
-static Fw::Key translateKey(unsigned short keyCode) {
-    switch (keyCode) {
-        case 0x35: return Fw::KeyEscape;
-        case 0x30: return Fw::KeyTab;
-        case 0x33: return Fw::KeyBackspace;
-        case 0x24: return Fw::KeyEnter;
-        case 0x31: return Fw::KeySpace;
-        case 0x38: return Fw::KeyShift;
-        case 0x3B: return Fw::KeyCtrl;
-        case 0x3A: return Fw::KeyAlt;
-        case 0x37: return Fw::KeyMeta;
-        case 0x7E: return Fw::KeyUp;
-        case 0x7D: return Fw::KeyDown;
-        case 0x7B: return Fw::KeyLeft;
-        case 0x7C: return Fw::KeyRight;
-        case 0x72: return Fw::KeyInsert;
-        case 0x75: return Fw::KeyDelete;
-        case 0x73: return Fw::KeyHome;
-        case 0x77: return Fw::KeyEnd;
-        case 0x74: return Fw::KeyPageUp;
-        case 0x79: return Fw::KeyPageDown;
-        case 0x7A: return Fw::KeyF1;
-        case 0x78: return Fw::KeyF2;
-        case 0x63: return Fw::KeyF3;
-        case 0x76: return Fw::KeyF4;
-        case 0x60: return Fw::KeyF5;
-        case 0x61: return Fw::KeyF6;
-        case 0x62: return Fw::KeyF7;
-        case 0x64: return Fw::KeyF8;
-        case 0x65: return Fw::KeyF9;
-        case 0x6D: return Fw::KeyF10;
-        case 0x67: return Fw::KeyF11;
-        case 0x6F: return Fw::KeyF12;
-        case 0x00: return Fw::KeyA;
-        case 0x01: return Fw::KeyS;
-        case 0x02: return Fw::KeyD;
-        case 0x03: return Fw::KeyF;
-        case 0x05: return Fw::KeyG;
-        case 0x04: return Fw::KeyH;
-        case 0x26: return Fw::KeyJ;
-        case 0x28: return Fw::KeyK;
-        case 0x25: return Fw::KeyL;
-        case 0x2E: return Fw::KeyM;
-        case 0x2D: return Fw::KeyN;
-        case 0x1F: return Fw::KeyO;
-        case 0x23: return Fw::KeyP;
-        case 0x0C: return Fw::KeyQ;
-        case 0x0F: return Fw::KeyR;
-        case 0x0E: return Fw::KeyT;
-        case 0x20: return Fw::KeyU;
-        case 0x09: return Fw::KeyV;
-        case 0x0D: return Fw::KeyW;
-        case 0x07: return Fw::KeyX;
-        case 0x10: return Fw::KeyY;
-        case 0x06: return Fw::KeyZ;
-        case 0x1D: return Fw::Key0;
-        case 0x12: return Fw::Key1;
-        case 0x13: return Fw::Key2;
-        case 0x14: return Fw::Key3;
-        case 0x15: return Fw::Key4;
-        case 0x17: return Fw::Key5;
-        case 0x16: return Fw::Key6;
-        case 0x1A: return Fw::Key7;
-        case 0x1C: return Fw::Key8;
-        case 0x19: return Fw::Key9;
+// ─── GLFW callbacks ──────────────────────────────────────────────────────────
+
+static CocoaWindow* g_cocoaWindowInstance = nullptr;
+
+static Fw::Key glfwKeyToFw(int key) {
+    switch (key) {
+        case GLFW_KEY_ESCAPE: return Fw::KeyEscape;
+        case GLFW_KEY_TAB: return Fw::KeyTab;
+        case GLFW_KEY_BACKSPACE: return Fw::KeyBackspace;
+        case GLFW_KEY_ENTER: return Fw::KeyEnter;
+        case GLFW_KEY_KP_ENTER: return Fw::KeyEnter;
+        case GLFW_KEY_SPACE: return Fw::KeySpace;
+        case GLFW_KEY_LEFT_SHIFT: case GLFW_KEY_RIGHT_SHIFT: return Fw::KeyShift;
+        case GLFW_KEY_LEFT_CONTROL: case GLFW_KEY_RIGHT_CONTROL: return Fw::KeyCtrl;
+        case GLFW_KEY_LEFT_ALT: case GLFW_KEY_RIGHT_ALT: return Fw::KeyAlt;
+        case GLFW_KEY_LEFT_SUPER: case GLFW_KEY_RIGHT_SUPER: return Fw::KeyMeta;
+        case GLFW_KEY_UP: return Fw::KeyUp;
+        case GLFW_KEY_DOWN: return Fw::KeyDown;
+        case GLFW_KEY_LEFT: return Fw::KeyLeft;
+        case GLFW_KEY_RIGHT: return Fw::KeyRight;
+        case GLFW_KEY_INSERT: return Fw::KeyInsert;
+        case GLFW_KEY_DELETE: return Fw::KeyDelete;
+        case GLFW_KEY_HOME: return Fw::KeyHome;
+        case GLFW_KEY_END: return Fw::KeyEnd;
+        case GLFW_KEY_PAGE_UP: return Fw::KeyPageUp;
+        case GLFW_KEY_PAGE_DOWN: return Fw::KeyPageDown;
+        case GLFW_KEY_F1: return Fw::KeyF1;
+        case GLFW_KEY_F2: return Fw::KeyF2;
+        case GLFW_KEY_F3: return Fw::KeyF3;
+        case GLFW_KEY_F4: return Fw::KeyF4;
+        case GLFW_KEY_F5: return Fw::KeyF5;
+        case GLFW_KEY_F6: return Fw::KeyF6;
+        case GLFW_KEY_F7: return Fw::KeyF7;
+        case GLFW_KEY_F8: return Fw::KeyF8;
+        case GLFW_KEY_F9: return Fw::KeyF9;
+        case GLFW_KEY_F10: return Fw::KeyF10;
+        case GLFW_KEY_F11: return Fw::KeyF11;
+        case GLFW_KEY_F12: return Fw::KeyF12;
+        case GLFW_KEY_A: return Fw::KeyA; case GLFW_KEY_B: return Fw::KeyB;
+        case GLFW_KEY_C: return Fw::KeyC; case GLFW_KEY_D: return Fw::KeyD;
+        case GLFW_KEY_E: return Fw::KeyE; case GLFW_KEY_F: return Fw::KeyF;
+        case GLFW_KEY_G: return Fw::KeyG; case GLFW_KEY_H: return Fw::KeyH;
+        case GLFW_KEY_I: return Fw::KeyI; case GLFW_KEY_J: return Fw::KeyJ;
+        case GLFW_KEY_K: return Fw::KeyK; case GLFW_KEY_L: return Fw::KeyL;
+        case GLFW_KEY_M: return Fw::KeyM; case GLFW_KEY_N: return Fw::KeyN;
+        case GLFW_KEY_O: return Fw::KeyO; case GLFW_KEY_P: return Fw::KeyP;
+        case GLFW_KEY_Q: return Fw::KeyQ; case GLFW_KEY_R: return Fw::KeyR;
+        case GLFW_KEY_S: return Fw::KeyS; case GLFW_KEY_T: return Fw::KeyT;
+        case GLFW_KEY_U: return Fw::KeyU; case GLFW_KEY_V: return Fw::KeyV;
+        case GLFW_KEY_W: return Fw::KeyW; case GLFW_KEY_X: return Fw::KeyX;
+        case GLFW_KEY_Y: return Fw::KeyY; case GLFW_KEY_Z: return Fw::KeyZ;
+        case GLFW_KEY_0: return Fw::Key0; case GLFW_KEY_1: return Fw::Key1;
+        case GLFW_KEY_2: return Fw::Key2; case GLFW_KEY_3: return Fw::Key3;
+        case GLFW_KEY_4: return Fw::Key4; case GLFW_KEY_5: return Fw::Key5;
+        case GLFW_KEY_6: return Fw::Key6; case GLFW_KEY_7: return Fw::Key7;
+        case GLFW_KEY_8: return Fw::Key8; case GLFW_KEY_9: return Fw::Key9;
         default: return Fw::KeyUnknown;
     }
 }
 
-static uint8_t translateModifiers(NSEventModifierFlags flags) {
-    uint8_t modifiers = Fw::KeyboardNoModifier;
-    if (flags & NSEventModifierFlagShift) modifiers |= Fw::KeyboardShiftModifier;
-    if (flags & NSEventModifierFlagControl) modifiers |= Fw::KeyboardCtrlModifier;
-    if (flags & NSEventModifierFlagOption) modifiers |= Fw::KeyboardAltModifier;
-    // Command is often mapped to Ctrl in OTClient.
-    if (flags & NSEventModifierFlagCommand) modifiers |= Fw::KeyboardCtrlModifier; 
-    return modifiers;
+static uint8_t glfwModsToFw(int mods) {
+    uint8_t m = Fw::KeyboardNoModifier;
+    if (mods & GLFW_MOD_SHIFT)   m |= Fw::KeyboardShiftModifier;
+    if (mods & GLFW_MOD_CONTROL) m |= Fw::KeyboardCtrlModifier;
+    if (mods & GLFW_MOD_ALT)     m |= Fw::KeyboardAltModifier;
+    if (mods & GLFW_MOD_SUPER)   m |= Fw::KeyboardCtrlModifier; // Cmd → Ctrl
+    return m;
 }
 
-@interface CocoaWindowDelegate : NSObject <NSWindowDelegate>
-@property (nonatomic, assign) CocoaWindow* window;
-@end
-
-@implementation CocoaWindowDelegate
-- (void)windowWillClose:(NSNotification *)notification {
-    if (self.window) {
-        // Handle window close
-    }
-}
-- (void)windowDidResize:(NSNotification *)notification {
-    if (self.window) {
-        NSWindow *nsWindow = (NSWindow *)notification.object;
-        NSRect contentRect = [nsWindow contentRectForFrameRect:nsWindow.frame];
-        CGFloat scale = [nsWindow backingScaleFactor];
-        self.window->setDisplayDensity((float)scale);
-        self.window->resize(TSize<int>((int)(contentRect.size.width * scale), (int)(contentRect.size.height * scale)));
-    }
-}
-@end
-
-@interface NativeCocoaView : NSView
-@property (nonatomic, assign) CocoaWindow* otcWindow;
-@end
-
-@implementation NativeCocoaView
-
-- (BOOL)acceptsFirstResponder { return YES; }
-
-- (void)keyDown:(NSEvent *)event {
-    if (_otcWindow) {
-        InputEvent otEvent;
-        otEvent.type = Fw::InputEventType::KeyDownInputEvent;
-        otEvent.keyCode = translateKey([event keyCode]);
-        otEvent.keyboardModifiers = translateModifiers([event modifierFlags]);
-        _otcWindow->fireInputEvent(otEvent);
-    }
+static void glfwKeyCallback(GLFWwindow*, int key, int /*scancode*/, int action, int mods) {
+    if (!g_cocoaWindowInstance) return;
+    if (action == GLFW_REPEAT) return;
+    InputEvent ev;
+    ev.type = (action == GLFW_PRESS) ? Fw::InputEventType::KeyDownInputEvent
+                                      : Fw::InputEventType::KeyUpInputEvent;
+    ev.keyCode = glfwKeyToFw(key);
+    ev.keyboardModifiers = glfwModsToFw(mods);
+    g_cocoaWindowInstance->fireInputEvent(ev);
 }
 
-- (void)keyUp:(NSEvent *)event {
-    if (_otcWindow) {
-        InputEvent otEvent;
-        otEvent.type = Fw::InputEventType::KeyUpInputEvent;
-        otEvent.keyCode = translateKey([event keyCode]);
-        otEvent.keyboardModifiers = translateModifiers([event modifierFlags]);
-        _otcWindow->fireInputEvent(otEvent);
-    }
+static void glfwCharCallback(GLFWwindow*, unsigned int codepoint) {
+    if (!g_cocoaWindowInstance) return;
+    InputEvent ev;
+    ev.type = Fw::InputEventType::KeyPressInputEvent;
+    ev.keyCode = Fw::KeyUnknown;
+    ev.keyboardModifiers = Fw::KeyboardNoModifier;
+    // encode codepoint as UTF-8 in keyText
+    char buf[5] = {};
+    if (codepoint < 0x80) { buf[0] = (char)codepoint; }
+    else if (codepoint < 0x800) { buf[0] = 0xC0|(codepoint>>6); buf[1] = 0x80|(codepoint&0x3F); }
+    else if (codepoint < 0x10000) { buf[0] = 0xE0|(codepoint>>12); buf[1] = 0x80|((codepoint>>6)&0x3F); buf[2] = 0x80|(codepoint&0x3F); }
+    else { buf[0] = 0xF0|(codepoint>>18); buf[1] = 0x80|((codepoint>>12)&0x3F); buf[2] = 0x80|((codepoint>>6)&0x3F); buf[3] = 0x80|(codepoint&0x3F); }
+    ev.keyText = buf;
+    g_cocoaWindowInstance->fireInputEvent(ev);
 }
 
-- (void)mouseDown:(NSEvent *)event {
-    if (_otcWindow) {
-        NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
-        CGFloat scale = [[self window] backingScaleFactor];
-        InputEvent otEvent;
-        otEvent.type = Fw::InputEventType::MousePressInputEvent;
-        otEvent.mouseButton = Fw::MouseButton::MouseLeftButton;
-        otEvent.mousePos = TPoint<int>((int)(location.x * scale), (int)((self.bounds.size.height - location.y) * scale));
-        otEvent.keyboardModifiers = translateModifiers([event modifierFlags]);
-        _otcWindow->fireInputEvent(otEvent);
-    }
+static void glfwMouseButtonCallback(GLFWwindow* win, int button, int action, int mods) {
+    if (!g_cocoaWindowInstance) return;
+    InputEvent ev;
+    ev.type = (action == GLFW_PRESS) ? Fw::InputEventType::MousePressInputEvent
+                                      : Fw::InputEventType::MouseReleaseInputEvent;
+    if (button == GLFW_MOUSE_BUTTON_LEFT)   ev.mouseButton = Fw::MouseButton::MouseLeftButton;
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT)  ev.mouseButton = Fw::MouseButton::MouseRightButton;
+    else if (button == GLFW_MOUSE_BUTTON_MIDDLE) ev.mouseButton = Fw::MouseButton::MouseMidButton;
+    else return;
+    double xpos, ypos;
+    glfwGetCursorPos(win, &xpos, &ypos);
+    float scale = g_cocoaWindowInstance->getDisplayDensity();
+    ev.mousePos = TPoint<int>((int)(xpos * scale), (int)(ypos * scale));
+    ev.keyboardModifiers = glfwModsToFw(mods);
+    g_cocoaWindowInstance->fireInputEvent(ev);
 }
 
-- (void)mouseUp:(NSEvent *)event {
-    if (_otcWindow) {
-        NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
-        CGFloat scale = [[self window] backingScaleFactor];
-        InputEvent otEvent;
-        otEvent.type = Fw::InputEventType::MouseReleaseInputEvent;
-        otEvent.mouseButton = Fw::MouseButton::MouseLeftButton;
-        otEvent.mousePos = TPoint<int>((int)(location.x * scale), (int)((self.bounds.size.height - location.y) * scale));
-        otEvent.keyboardModifiers = translateModifiers([event modifierFlags]);
-        _otcWindow->fireInputEvent(otEvent);
-    }
+static void glfwCursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
+    if (!g_cocoaWindowInstance) return;
+    float scale = g_cocoaWindowInstance->getDisplayDensity();
+    InputEvent ev;
+    ev.type = Fw::InputEventType::MouseMoveInputEvent;
+    ev.mousePos = TPoint<int>((int)(xpos * scale), (int)(ypos * scale));
+    ev.mouseButton = Fw::MouseButton::MouseNoButton;
+    ev.keyboardModifiers = Fw::KeyboardNoModifier;
+    g_cocoaWindowInstance->fireInputEvent(ev);
 }
 
-- (void)rightMouseDown:(NSEvent *)event {
-    if (_otcWindow) {
-        NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
-        CGFloat scale = [[self window] backingScaleFactor];
-        InputEvent otEvent;
-        otEvent.type = Fw::InputEventType::MousePressInputEvent;
-        otEvent.mouseButton = Fw::MouseButton::MouseRightButton;
-        otEvent.mousePos = TPoint<int>((int)(location.x * scale), (int)((self.bounds.size.height - location.y) * scale));
-        otEvent.keyboardModifiers = translateModifiers([event modifierFlags]);
-        _otcWindow->fireInputEvent(otEvent);
-    }
+static void glfwScrollCallback(GLFWwindow*, double /*xoffset*/, double yoffset) {
+    if (!g_cocoaWindowInstance) return;
+    InputEvent ev;
+    ev.type = Fw::InputEventType::MouseWheelInputEvent;
+    ev.wheelDirection = (yoffset > 0) ? Fw::MouseWheelUp : Fw::MouseWheelDown;
+    ev.mouseButton = Fw::MouseButton::MouseNoButton;
+    ev.keyboardModifiers = Fw::KeyboardNoModifier;
+    g_cocoaWindowInstance->fireInputEvent(ev);
 }
 
-- (void)rightMouseUp:(NSEvent *)event {
-    if (_otcWindow) {
-        NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
-        CGFloat scale = [[self window] backingScaleFactor];
-        InputEvent otEvent;
-        otEvent.type = Fw::InputEventType::MouseReleaseInputEvent;
-        otEvent.mouseButton = Fw::MouseButton::MouseRightButton;
-        otEvent.mousePos = TPoint<int>((int)(location.x * scale), (int)((self.bounds.size.height - location.y) * scale));
-        otEvent.keyboardModifiers = translateModifiers([event modifierFlags]);
-        _otcWindow->fireInputEvent(otEvent);
-    }
+static void glfwWindowSizeCallback(GLFWwindow*, int width, int height) {
+    if (!g_cocoaWindowInstance) return;
+    // width/height are screen coords; multiply by backing scale for pixel coords
+    float scale = g_cocoaWindowInstance->getDisplayDensity();
+    g_cocoaWindowInstance->resize(TSize<int>((int)(width * scale), (int)(height * scale)));
 }
 
-- (void)mouseDragged:(NSEvent *)event {
-    if (_otcWindow) {
-        NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
-        CGFloat scale = [[self window] backingScaleFactor];
-        InputEvent otEvent;
-        otEvent.type = Fw::InputEventType::MouseMoveInputEvent;
-        otEvent.mouseButton = Fw::MouseButton::MouseLeftButton;
-        otEvent.mousePos = TPoint<int>((int)(location.x * scale), (int)((self.bounds.size.height - location.y) * scale));
-        otEvent.keyboardModifiers = translateModifiers([event modifierFlags]);
-        _otcWindow->fireInputEvent(otEvent);
-    }
+static void glfwWindowFocusCallback(GLFWwindow*, int focused) {
+    if (!g_cocoaWindowInstance) return;
+    // nothing critical to do here for now
 }
 
-- (void)mouseMoved:(NSEvent *)event {
-    if (_otcWindow) {
-        NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
-        CGFloat scale = [[self window] backingScaleFactor];
-        InputEvent otEvent;
-        otEvent.type = Fw::InputEventType::MouseMoveInputEvent;
-        otEvent.mouseButton = Fw::MouseButton::MouseNoButton;
-        otEvent.mousePos = TPoint<int>((int)(location.x * scale), (int)((self.bounds.size.height - location.y) * scale));
-        otEvent.keyboardModifiers = translateModifiers([event modifierFlags]);
-        _otcWindow->fireInputEvent(otEvent);
-    }
+static void glfwWindowCloseCallback(GLFWwindow*) {
+    if (!g_cocoaWindowInstance) return;
+    g_cocoaWindowInstance->fireCloseRequest();
 }
 
-- (void)scrollWheel:(NSEvent *)event {
-    if (_otcWindow) {
-        NSPoint location = [self convertPoint:[event locationInWindow] fromView:nil];
-        CGFloat scale = [[self window] backingScaleFactor];
-        InputEvent otEvent;
-        otEvent.type = Fw::InputEventType::MouseWheelInputEvent;
-        otEvent.wheelDirection = [event scrollingDeltaY] > 0 ? Fw::MouseWheelUp : Fw::MouseWheelDown;
-        otEvent.mousePos = TPoint<int>((int)(location.x * scale), (int)((self.bounds.size.height - location.y) * scale));
-        otEvent.keyboardModifiers = translateModifiers([event modifierFlags]);
-        _otcWindow->fireInputEvent(otEvent);
-    }
-}
-
-@end
+// ─── CocoaWindow implementation ──────────────────────────────────────────────
 
 CocoaWindow::CocoaWindow()
 {
-    m_window = nullptr;
-    m_view = nullptr;
-    m_glContext = nullptr;
-    m_mouseVisible = true;
-    m_size = TSize<int>(800, 600);
 }
 
 CocoaWindow::~CocoaWindow()
@@ -274,273 +206,258 @@ CocoaWindow::~CocoaWindow()
 
 void CocoaWindow::init()
 {
-    [NSApplication sharedApplication];
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    g_cocoaWindowInstance = this;
 
-    NSRect frame = NSMakeRect(0, 0, m_size.width(), m_size.height());
-    NSUInteger styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
-
-    NSWindow* window = [[NSWindow alloc] initWithContentRect:frame
-                                                   styleMask:styleMask
-                                                     backing:NSBackingStoreBuffered
-                                                       defer:NO];
-    [window setTitle:@"OTClient"];
-    [window center];
-    [window makeKeyAndOrderFront:nil];
-
-    NativeCocoaView* view = [[NativeCocoaView alloc] initWithFrame:frame];
-    view.otcWindow = this;
-    [view setWantsBestResolutionOpenGLSurface:YES];
-    [window setContentView:view];
-    [window makeFirstResponder:view];
-
-    CocoaWindowDelegate* delegate = [[CocoaWindowDelegate alloc] init];
-    delegate.window = this;
-    [window setDelegate:delegate];
-
-    m_displayDensity = (float)[window backingScaleFactor];
-
-    NSOpenGLPixelFormatAttribute attrs[] = {
-        NSOpenGLPFAColorSize, 24,
-        NSOpenGLPFAAlphaSize, 8,
-        NSOpenGLPFADepthSize, 24,
-        NSOpenGLPFADoubleBuffer,
-        NSOpenGLPFAAccelerated,
-        NSOpenGLPFANoRecovery,
-        NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersionLegacy,
-        0
-    };
-
-    NSOpenGLPixelFormat* pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
-    if (!pixelFormat) {
-        g_logger.error("Failed to create NSOpenGLPixelFormat with Legacy profile, trying default...");
-        NSOpenGLPixelFormatAttribute fallBackAttrs[] = {
-            NSOpenGLPFAColorSize, 24,
-            NSOpenGLPFAAlphaSize, 8,
-            NSOpenGLPFADoubleBuffer,
-            0
-        };
-        pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:fallBackAttrs];
+    if (!glfwInit()) {
+        g_logger.fatal("GLFW: glfwInit() failed");
+        return;
     }
 
-    NSOpenGLContext* glContext = [[NSOpenGLContext alloc] initWithFormat:pixelFormat shareContext:nil];
-    if (!glContext) {
-        g_logger.fatal("Unable to create NSOpenGLContext");
+    // Don't force 3.2 Core, as OTClient uses legacy OpenGL 2.1 features/shaders.
+    // On macOS, asking for nothing usually gives 2.1 with full extensions.
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    
+    glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
+    glfwWindowHint(GLFW_RED_BITS,   8);
+    glfwWindowHint(GLFW_GREEN_BITS, 8);
+    glfwWindowHint(GLFW_BLUE_BITS,  8);
+    glfwWindowHint(GLFW_ALPHA_BITS, 8);
+    glfwWindowHint(GLFW_DEPTH_BITS, 24);
+    glfwWindowHint(GLFW_RESIZABLE,  GLFW_TRUE);
+    glfwWindowHint(GLFW_FOCUSED,    GLFW_TRUE);
+    glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+
+    GLFWwindow* glfwWin = glfwCreateWindow(800, 600, "OTClient", nullptr, nullptr);
+    if (!glfwWin) {
+        const char* description;
+        int code = glfwGetError(&description);
+        g_logger.fatal("GLFW: glfwCreateWindow() failed (Code: {}, Desc: {})", code, description ? description : "N/A");
+        
+        // Fallback: try without any version hints
+        glfwDefaultWindowHints();
+        glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+        glfwWin = glfwCreateWindow(800, 600, "OTClient (Fallback)", nullptr, nullptr);
+        if(!glfwWin) {
+             g_logger.fatal("GLFW: Fallback window creation also failed.");
+             glfwTerminate();
+             return;
+        }
     }
 
-    [glContext setView:view];
-    [glContext makeCurrentContext];
-    [glContext update];
+    glfwMakeContextCurrent(glfwWin);
 
-    // Verify context
-    const char* renderer = (const char*)glGetString(GL_RENDERER);
-    if (!renderer) {
-        g_logger.error("OpenGL context made current but glGetString(GL_RENDERER) is NULL!");
+    // Retina scale factor
+    int fbW, fbH, winW, winH;
+    glfwGetFramebufferSize(glfwWin, &fbW, &fbH);
+    glfwGetWindowSize(glfwWin, &winW, &winH);
+    m_displayDensity = (winW > 0) ? (float)fbW / (float)winW : 1.0f;
+
+    m_size = TSize<int>(fbW, fbH);
+
+    // Verify context via manually fetched proc address (safer on modern macOS)
+    typedef const GLubyte* (*PFN_glGetString)(GLenum);
+    PFN_glGetString p_glGetString = (PFN_glGetString)glfwGetProcAddress("glGetString");
+    
+    if (p_glGetString) {
+        const char* renderer = (const char*)p_glGetString(GL_RENDERER);
+        const char* version  = (const char*)p_glGetString(GL_VERSION);
+        if (renderer && version) {
+            g_logger.info("GLFW/OpenGL: Renderer: {}, Version: {}", renderer, version);
+        } else {
+            g_logger.error("GLFW/OpenGL: glGetString(PROC) returned NULL!");
+        }
     } else {
-        g_logger.info("Cocoa: OpenGL context initialized. Renderer: {}", renderer);
+        g_logger.error("GLFW/OpenGL: Could not get proc address for glGetString!");
     }
 
-    m_window = (void*)window;
-    m_view = (void*)view;
-    m_glContext = (void*)glContext;
+    // Register GLFW callbacks
+    glfwSetKeyCallback(glfwWin, glfwKeyCallback);
+    glfwSetCharCallback(glfwWin, glfwCharCallback);
+    glfwSetMouseButtonCallback(glfwWin, glfwMouseButtonCallback);
+    glfwSetCursorPosCallback(glfwWin, glfwCursorPosCallback);
+    glfwSetScrollCallback(glfwWin, glfwScrollCallback);
+    glfwSetWindowSizeCallback(glfwWin, glfwWindowSizeCallback);
+    glfwSetWindowFocusCallback(glfwWin, glfwWindowFocusCallback);
+    glfwSetWindowCloseCallback(glfwWin, glfwWindowCloseCallback);
 
-    m_created = true;
+    m_window = (void*)glfwWin;
     m_visible = true;
 }
 
 void CocoaWindow::terminate()
 {
-    if (m_glContext) {
-        NSOpenGLContext* glContext = (NSOpenGLContext*)m_glContext;
-        [glContext clearDrawable];
-        m_glContext = nullptr;
-    }
-    if (m_view) {
-        NativeCocoaView* view = (__bridge_transfer NativeCocoaView*)m_view;
-        m_view = nullptr;
-    }
+    g_cocoaWindowInstance = nullptr;
     if (m_window) {
-        NSWindow* window = (__bridge_transfer NSWindow*)m_window;
-        [window close];
+        glfwDestroyWindow((GLFWwindow*)m_window);
         m_window = nullptr;
     }
-    for (void* cursor : m_cursors) {
-        if (cursor) {
-            // NSCursor objects are managed by Objective-C runtime, but if we held them
-        }
-    }
+    glfwTerminate();
     m_cursors.clear();
 }
 
 void CocoaWindow::move(const TPoint<int>& pos)
 {
-    NSWindow* window = (__bridge NSWindow*)m_window;
-    NSRect frame = window.frame;
-    frame.origin.x = pos.x;
-    frame.origin.y = pos.y; 
-    [window setFrame:frame display:YES];
+    if (!m_window) return;
+    float scale = m_displayDensity > 0 ? m_displayDensity : 1.0f;
+    glfwSetWindowPos((GLFWwindow*)m_window, (int)(pos.x / scale), (int)(pos.y / scale));
 }
 
 void CocoaWindow::resize(const TSize<int>& size)
 {
-    NSWindow* window = (__bridge NSWindow*)m_window;
-    NSRect frame = window.frame;
-    frame.size.width = size.width();
-    frame.size.height = size.height();
-    [window setFrame:frame display:YES];
+    if (!m_window) return;
     m_size = size;
-
-    NSOpenGLContext* glContext = (__bridge NSOpenGLContext*)m_glContext;
-    [glContext update];
+    float scale = m_displayDensity > 0 ? m_displayDensity : 1.0f;
+    glfwSetWindowSize((GLFWwindow*)m_window, (int)(size.width() / scale), (int)(size.height() / scale));
 }
 
 void CocoaWindow::show()
 {
-    NSWindow* window = (__bridge NSWindow*)m_window;
-    [window orderFront:nil];
+    if (!m_window) return;
+    glfwShowWindow((GLFWwindow*)m_window);
     m_visible = true;
 }
 
 void CocoaWindow::hide()
 {
-    NSWindow* window = (__bridge NSWindow*)m_window;
-    [window orderOut:nil];
+    if (!m_window) return;
+    glfwHideWindow((GLFWwindow*)m_window);
     m_visible = false;
 }
 
 void CocoaWindow::maximize()
 {
-    NSWindow* window = (__bridge NSWindow*)m_window;
-    [window zoom:nil];
+    if (!m_window) return;
+    glfwMaximizeWindow((GLFWwindow*)m_window);
 }
 
 void CocoaWindow::poll()
 {
-    NSEvent* event;
-    while ((event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                        untilDate:[NSDate distantPast]
-                                           inMode:NSDefaultRunLoopMode
-                                          dequeue:YES])) {
-        [NSApp sendEvent:event];
-    }
+    glfwPollEvents();
 }
 
 void CocoaWindow::swapBuffers()
 {
-    NSOpenGLContext* glContext = (__bridge NSOpenGLContext*)m_glContext;
-    [glContext makeCurrentContext];
-    [glContext flushBuffer];
+    if (!m_window) return;
+    glfwSwapBuffers((GLFWwindow*)m_window);
+}
+
+void CocoaWindow::makeCurrent()
+{
+    if (!m_window) return;
+    glfwMakeContextCurrent((GLFWwindow*)m_window);
 }
 
 void CocoaWindow::showMouse()
 {
-    [NSCursor unhide];
+    if (!m_window) return;
+    glfwSetInputMode((GLFWwindow*)m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     m_mouseVisible = true;
 }
 
 void CocoaWindow::hideMouse()
 {
-    [NSCursor hide];
+    if (!m_window) return;
+    glfwSetInputMode((GLFWwindow*)m_window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
     m_mouseVisible = false;
 }
 
 void CocoaWindow::setMouseCursor(int cursorId)
 {
+    if (!m_window) return;
     if (cursorId >= 0 && cursorId < (int)m_cursors.size()) {
-        NSCursor* cursor = (__bridge NSCursor*)m_cursors[cursorId];
-        [cursor set];
+        GLFWcursor* cursor = (GLFWcursor*)m_cursors[cursorId];
+        glfwSetCursor((GLFWwindow*)m_window, cursor);
     }
 }
 
 void CocoaWindow::restoreMouseCursor()
 {
-    [NSCursor unhide];
+    if (!m_window) return;
+    glfwSetCursor((GLFWwindow*)m_window, nullptr);
+    glfwSetInputMode((GLFWwindow*)m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 }
 
 void CocoaWindow::setTitle(std::string_view title)
 {
-    NSWindow* window = (__bridge NSWindow*)m_window;
-    [window setTitle:[NSString stringWithUTF8String:title.data()]];
+    if (!m_window) return;
+    glfwSetWindowTitle((GLFWwindow*)m_window, title.data());
 }
 
 void CocoaWindow::setMinimumSize(const TSize<int>& minimumSize)
 {
-    NSWindow* window = (__bridge NSWindow*)m_window;
-    [window setMinSize:NSMakeSize(minimumSize.width(), minimumSize.height())];
+    if (!m_window) return;
+    float scale = m_displayDensity > 0 ? m_displayDensity : 1.0f;
+    glfwSetWindowSizeLimits((GLFWwindow*)m_window,
+        (int)(minimumSize.width() / scale), (int)(minimumSize.height() / scale),
+        GLFW_DONT_CARE, GLFW_DONT_CARE);
 }
 
 void CocoaWindow::setFullscreen(bool fullscreen)
 {
-    NSWindow* window = (__bridge NSWindow*)m_window;
-    if (fullscreen != m_fullscreen) {
-        [window toggleFullScreen:nil];
-        m_fullscreen = fullscreen;
+    if (!m_window) return;
+    GLFWwindow* win = (GLFWwindow*)m_window;
+    if (fullscreen == m_fullscreen) return;
+    if (fullscreen) {
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        glfwSetWindowMonitor(win, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+    } else {
+        float scale = m_displayDensity > 0 ? m_displayDensity : 1.0f;
+        glfwSetWindowMonitor(win, nullptr, 100, 100,
+            (int)(m_size.width() / scale), (int)(m_size.height() / scale), GLFW_DONT_CARE);
     }
+    m_fullscreen = fullscreen;
 }
 
 void CocoaWindow::setVerticalSync(bool enable)
 {
-    NSOpenGLContext* glContext = (__bridge NSOpenGLContext*)m_glContext;
-    GLint swapInterval = enable ? 1 : 0;
-    [glContext setValues:&swapInterval forParameter:NSOpenGLCPSwapInterval];
+    glfwSwapInterval(enable ? 1 : 0);
     m_vsync = enable;
 }
 
-void CocoaWindow::setIcon(const std::string& iconFile)
+void CocoaWindow::setIcon(const std::string& /*iconFile*/)
 {
+    // GLFW icon is set via glfwSetWindowIcon with pixel data; skip for now.
 }
 
 void CocoaWindow::setClipboardText(std::string_view text)
 {
-    NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
-    [pasteboard clearContents];
-    [pasteboard setString:[NSString stringWithUTF8String:text.data()] forType:NSPasteboardTypeString];
+    if (!m_window) return;
+    glfwSetClipboardString((GLFWwindow*)m_window, text.data());
 }
 
 TSize<int> CocoaWindow::getDisplaySize()
 {
-    NSRect screenRect = [[NSScreen mainScreen] frame];
-    return TSize<int>((int)screenRect.size.width, (int)screenRect.size.height);
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    if (!monitor) return TSize<int>(1920, 1080);
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    return TSize<int>(mode->width, mode->height);
 }
 
 std::string CocoaWindow::getClipboardText()
 {
-    NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
-    NSString* string = [pasteboard stringForType:NSPasteboardTypeString];
-    if (string) {
-        return [string UTF8String];
-    }
-    return "";
+    if (!m_window) return "";
+    const char* text = glfwGetClipboardString((GLFWwindow*)m_window);
+    return text ? text : "";
 }
 
 int CocoaWindow::internalLoadMouseCursor(const ImagePtr& image, const TPoint<int>& hotSpot)
 {
     if (!image) return 0;
 
-    int width = image->getWidth();
+    int width  = image->getWidth();
     int height = image->getHeight();
     uint8_t* pixels = image->getPixelData();
 
-    NSBitmapImageRep* rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
-                                                                    pixelsWide:width
-                                                                    pixelsHigh:height
-                                                                 bitsPerSample:8
-                                                               samplesPerPixel:4
-                                                                      hasAlpha:YES
-                                                                      isPlanar:NO
-                                                                colorSpaceName:NSDeviceRGBColorSpace
-                                                                   bytesPerRow:width * 4
-                                                                  bitsPerPixel:32];
+    GLFWimage img;
+    img.width  = width;
+    img.height = height;
+    img.pixels = pixels;
 
-    memcpy([rep bitmapData], pixels, width * height * 4);
-
-    NSImage* nsImage = [[NSImage alloc] initWithSize:NSMakeSize(width, height)];
-    [nsImage addRepresentation:rep];
-
-    NSCursor* cursor = [[NSCursor alloc] initWithImage:nsImage hotSpot:NSMakePoint(hotSpot.x, hotSpot.y)];
-    
-    m_cursors.push_back((__bridge_retained void*)cursor);
-    return m_cursors.size() - 1;
+    GLFWcursor* cursor = glfwCreateCursor(&img, hotSpot.x, hotSpot.y);
+    m_cursors.push_back((void*)cursor);
+    return (int)m_cursors.size() - 1;
 }
 
 #endif

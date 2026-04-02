@@ -640,11 +640,22 @@ int LuaInterface::luaErrorHandler(lua_State*)
     return 1;
 }
 
-int LuaInterface::luaCppFunctionCallback(lua_State*)
+int LuaInterface::luaCppFunctionCallback(lua_State* L_STATE)
 {
     // retrieves function pointer from userdata
-    const auto* const funcPtr = static_cast<LuaCppFunctionPtr*>(g_lua.popUpvalueUserdata());
-    assert(funcPtr);
+    const auto* const funcPtr = static_cast<LuaCppFunctionPtr*>(lua_touserdata(L_STATE, lua_upvalueindex(1)));
+    if (!funcPtr) {
+        lua_Debug ar;
+        lua_getstack(L_STATE, 0, &ar);
+        lua_getinfo(L_STATE, "nS", &ar);
+        g_logger.error("luaCppFunctionCallback: funcPtr is NULL! Function: {}, Source: {}:{}", 
+                        ar.name ? ar.name : "unknown", ar.source ? ar.source : "N/A", ar.currentline);
+        assert(funcPtr);
+    }
+
+    // Set g_lua.L to the current state to ensure polymorphicPush/Pop use the right stack
+    lua_State* oldL = g_lua.L;
+    g_lua.L = L_STATE;
 
     int numRets = 0;
 
@@ -654,7 +665,9 @@ int LuaInterface::luaCppFunctionCallback(lua_State*)
         numRets = (*(funcPtr->get()))(&g_lua);
         --g_lua.m_cppCallbackDepth;
         assert(numRets == g_lua.stackSize());
+        g_lua.L = oldL;
     } catch (stdext::exception& e) {
+        g_lua.L = oldL;
         --g_lua.m_cppCallbackDepth;
         // cleanup stack
         while (g_lua.stackSize() > 0)
@@ -663,6 +676,7 @@ int LuaInterface::luaCppFunctionCallback(lua_State*)
         g_lua.pushString(fmt::format("C++ call failed: {}", g_lua.traceback(e.what())));
         g_lua.error();
     } catch (const std::exception& e) {
+        g_lua.L = oldL;
         --g_lua.m_cppCallbackDepth;
         while (g_lua.stackSize() > 0)
             g_lua.pop();
@@ -670,6 +684,7 @@ int LuaInterface::luaCppFunctionCallback(lua_State*)
         g_lua.pushString(fmt::format("C++ std::exception: {}", g_lua.traceback(e.what())));
         g_lua.error();
     } catch (...) {
+        g_lua.L = oldL;
         --g_lua.m_cppCallbackDepth;
         while (g_lua.stackSize() > 0)
             g_lua.pop();
