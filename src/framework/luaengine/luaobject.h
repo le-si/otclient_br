@@ -98,8 +98,6 @@ private:
     friend class LuaInterface;
 };
 
-extern int16_t g_luaThreadId;
-
 template<typename F>
 void connect(const LuaObjectPtr& obj, std::string_view field, const std::function<F>& f, bool pushFront = false);
 

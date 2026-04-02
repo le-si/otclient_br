@@ -24,7 +24,17 @@
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <framework/luaengine/luaobject.h>
+#ifdef __APPLE__
+#define Point MacPoint
+#define Size MacSize
+#define Rect MacRect
+#endif
 #include <httplib.h>
+#ifdef __APPLE__
+#undef Point
+#undef Size
+#undef Rect
+#endif
 
 class LoginHttp final : public LuaObject
 {

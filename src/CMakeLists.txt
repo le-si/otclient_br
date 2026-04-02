@@ -152,6 +152,7 @@ if(APPLE)
   # Required for Physfs
   find_library(FOUNDATION Foundation REQUIRED)
   find_library(IOKIT IOKit REQUIRED)
+  find_library(INIREADER_LIBRARY INIReader REQUIRED)
 endif()
 if(UNIX AND NOT ANDROID AND NOT WASM)
   find_package(X11 REQUIRED)
@@ -254,6 +255,8 @@ set(SOURCE_FILES
         framework/platform/platformwindow.cpp
         framework/platform/unixcrashhandler.cpp
         framework/platform/unixplatform.cpp
+        framework/platform/x11window.cpp
+        framework/platform/x11window.h
         framework/platform/win32crashhandler.cpp
         framework/platform/win32platform.cpp
         framework/stdext/demangle.cpp
@@ -359,7 +362,6 @@ if (TOGGLE_FRAMEWORK_GRAPHICS)
           framework/graphics/texturemanager.cpp
           framework/graphics/shadermanager.cpp
           framework/platform/win32window.cpp
-          framework/platform/x11window.cpp
           framework/ui/uianchorlayout.cpp
           framework/ui/uiboxlayout.cpp
           framework/ui/uigridlayout.cpp
@@ -404,7 +406,7 @@ endif()
 
 add_library(otclient_core STATIC ${SOURCE_FILES})
 
-target_link_libraries(otclient_core PRIVATE unofficial::inih::inireader)
+target_link_libraries(otclient_core PUBLIC unofficial::inih::inireader)
 
 if(NOT MSVC)
   target_link_options(otclient_core PUBLIC -flto=auto)
@@ -782,6 +784,7 @@ else() # Linux
           ${NLOHMANN_JSON_INCLUDE_DIR}
           ${OPENSSL_INCLUDE_DIR}
           ${CPPCODEC_INCLUDE_DIRS}
+          ${X11_INCLUDE_DIR}
   )
   target_link_libraries(otclient_core
           PUBLIC
@@ -799,6 +802,7 @@ else() # Linux
           ${GMP_LIBRARY}
           ${STDUUID}
           ${FOUNDATION}
+          ${X11_LIBRARIES}
           ${IOKIT}
           ${OPENSSL_LIBRARY}
           ${OPENSSL_CRYPTO_LIBRARY}
@@ -821,6 +825,7 @@ else() # Linux
           Vorbis::vorbisfile
           Vorbis::vorbis
           Freetype::Freetype
+          ${INIREADER_LIBRARY}
   )
 
   if (TOGGLE_FRAMEWORK_PROTOBUF)

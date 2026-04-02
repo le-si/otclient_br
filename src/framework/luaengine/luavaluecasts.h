@@ -44,6 +44,8 @@ bool luavalue_cast(int index, int& i);
 int push_luavalue(double d);
 bool luavalue_cast(int index, double& d);
 
+// OTClient stubs
+
 // float
 inline int push_luavalue(const float f) { push_luavalue(static_cast<double>(f)); return 1; }
 inline bool luavalue_cast(const int index, float& f)
@@ -141,6 +143,20 @@ inline bool luavalue_cast(const int idx, lua_u64& v)
     return r;
 }
 
+inline int push_luavalue(const unsigned long long v)
+{
+    push_luavalue(static_cast<double>(v));
+    return 1;
+}
+
+inline bool luavalue_cast(const int idx, unsigned long long& v)
+{
+    double d;
+    const bool r = luavalue_cast(idx, d);
+    v = static_cast<unsigned long long>(d);
+    return r;
+}
+
 // string
 int push_luavalue(const char* cstr);
 int push_luavalue(std::string_view str);
@@ -196,6 +212,10 @@ luavalue_cast(int index, std::shared_ptr<T>& ptr);
 // std::function
 template<typename Ret, typename... Args>
 int push_luavalue(const std::function<Ret(Args...)>& func);
+template<typename T> inline int push_luavalue(const std::shared_ptr<T>& ptr) {
+    if (!ptr) return push_luavalue(false);
+    return push_luavalue(ptr.get());
+}
 
 template<typename... Args>
 bool luavalue_cast(int index, std::function<void(Args...)>& func);
@@ -262,10 +282,7 @@ int push_internal_luavalue(const std::tuple<Args...>& tuple);
 #include "luaobject.h"
 
 template<typename T>
-int push_internal_luavalue(T v)
-{
-    return push_luavalue(v);
-}
+int push_internal_luavalue(T v) { return push_luavalue(v); }
 
 template<class T>
 std::enable_if_t<std::is_enum_v<T>, bool>

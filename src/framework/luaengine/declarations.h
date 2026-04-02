@@ -30,3 +30,5 @@ class LuaObject;
 using LuaCppFunction = std::function<int(LuaInterface*)>;
 using LuaCppFunctionPtr = std::unique_ptr<LuaCppFunction>;
 using LuaObjectPtr = std::shared_ptr<LuaObject>;
+
+extern int16_t g_luaThreadId;
