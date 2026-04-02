@@ -213,10 +213,12 @@ luavalue_cast(int index, std::shared_ptr<T>& ptr);
 // std::function
 template<typename Ret, typename... Args>
 int push_luavalue(const std::function<Ret(Args...)>& func);
+/*
 template<typename T> inline int push_luavalue(const std::shared_ptr<T>& ptr) {
     if (!ptr) return push_luavalue(false);
     return push_luavalue(ptr.get());
 }
+*/
 
 template<typename... Args>
 bool luavalue_cast(int index, std::function<void(Args...)>& func);

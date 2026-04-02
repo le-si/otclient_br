@@ -53,6 +53,9 @@ void ConfigManager::terminate()
 
 ConfigPtr ConfigManager::getSettings()
 {
+    if (!m_settings) {
+        g_logger.error("ConfigManager::getSettings: m_settings is NULL!");
+    }
     return m_settings;
 }
 

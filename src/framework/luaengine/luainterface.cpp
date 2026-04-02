@@ -696,12 +696,13 @@ int LuaInterface::luaCppFunctionCallback(lua_State* L_STATE)
     return numRets;
 }
 
-int LuaInterface::luaCollectCppFunction(lua_State*)
+int LuaInterface::luaCollectCppFunction(lua_State* L_STATE)
 {
-    auto* const funcPtr = static_cast<LuaCppFunctionPtr*>(g_lua.popUserdata());
-    assert(funcPtr);
-    funcPtr->reset();
-    --g_lua.m_totalFuncRefs;
+    auto* const funcPtr = static_cast<LuaCppFunctionPtr*>(lua_touserdata(L_STATE, 1));
+    if (funcPtr) {
+        funcPtr->reset();
+        --g_lua.m_totalFuncRefs;
+    }
     return 0;
 }
 
