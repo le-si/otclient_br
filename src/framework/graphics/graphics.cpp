@@ -23,6 +23,7 @@
 #include "graphics.h"
 
 #include "fontmanager.h"
+#include <framework/platform/platformwindow.h>
 #include "painter.h"
 #include "texturemanager.h"
 #include <framework/core/logger.h>
@@ -36,18 +37,23 @@ Graphics g_graphics;
 
 void Graphics::init()
 {
+    fprintf(stderr, "[DEBUG] Graphics::init() START\n");
 #ifndef OPENGL_ES
     // On macOS/Core Profile, glewExperimental is often required to load extensions correctly.
+    g_window.makeCurrent();
+    
+    fprintf(stderr, "[DEBUG] Graphics::init: Initializing GLEW...\n");
     glewExperimental = GL_TRUE;
     const GLenum err = glewInit();
     if (err != GLEW_OK) {
-        // Note: glewInit can return GLEW_ERROR_NO_GLX_DISPLAY on some setups but still work.
-        // We'll log it but try to continue if it's not fatal.
-        g_logger.error("GLEW init: {}", (const char*)glewGetErrorString(err));
+        fprintf(stderr, "[DEBUG] GLEW init FAILED: %s\n", (const char*)glewGetErrorString(err));
+        g_logger.error("Graphics::init: GLEW initialization failed: {}", (const char*)glewGetErrorString(err));
+    } else {
+        fprintf(stderr, "[DEBUG] GLEW init OK\n");
     }
     
     // Clear any error set by glewInit (common with glewExperimental)
-    glGetError();
+    while (glGetError() != GL_NO_ERROR);
 #endif
 
     auto glStringProc = (const GLubyte* (*)(GLenum))glGetString;
@@ -97,12 +103,16 @@ void Graphics::init()
     glGetIntegerv(GL_ALPHA_BITS, &m_alphaBits);
 
     m_ok = true;
+    fprintf(stderr, "[DEBUG] Graphics::init: creating Painter...\n");
 
     g_painter = std::make_unique<Painter>();
+    fprintf(stderr, "[DEBUG] Graphics::init: Painter created OK\n");
 
     g_textures.init();
+    fprintf(stderr, "[DEBUG] Graphics::init: Textures init OK\n");
 
-    g_fonts.init();   
+    g_fonts.init();
+    fprintf(stderr, "[DEBUG] Graphics::init() DONE\n");
 
 }
 

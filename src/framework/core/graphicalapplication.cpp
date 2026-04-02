@@ -49,19 +49,25 @@ GraphicalApplication g_app;
 
 void GraphicalApplication::init(std::vector<std::string>& args, ApplicationContext* context)
 {
+    fprintf(stderr, "[DEBUG] GraphicalApplication::init() START\n");
     Application::init(args, context);
+    fprintf(stderr, "[DEBUG] Application::init() done\n");
 
     auto graphicalContext = static_cast<GraphicalApplicationContext*>(context);
     setDrawEvents(graphicalContext->getDrawEvents());
 
     // setup platform window
+    fprintf(stderr, "[DEBUG] Calling g_window.init()...\n");
     g_window.init();
+    fprintf(stderr, "[DEBUG] g_window.init() done, calling hide()...\n");
     g_window.hide();
+    fprintf(stderr, "[DEBUG] g_window.hide() done\n");
 
     // set the window title color
     g_window.setTitleBarColor(Color::black);
 
     g_window.setOnResize([this](auto&& PH1) {
+        fprintf(stderr, "[DEBUG] onResize callback fired: %dx%d\n", PH1.width(), PH1.height());
         if (!m_running) resize(PH1);
         else g_dispatcher.addEvent([&, PH1] { resize(PH1); });
     });
@@ -73,26 +79,37 @@ void GraphicalApplication::init(std::vector<std::string>& args, ApplicationConte
 
     g_window.setOnClose([this] { g_dispatcher.addEvent([this] { close(); }); });
 
+    fprintf(stderr, "[DEBUG] Calling g_mouse.init()...\n");
     g_mouse.init();
 
     // initialize ui
+    fprintf(stderr, "[DEBUG] Calling g_ui.init()...\n");
     g_ui.init();
 
     // initialize graphics
+    fprintf(stderr, "[DEBUG] Calling g_window.makeCurrent()...\n");
     g_window.makeCurrent();
+    fprintf(stderr, "[DEBUG] Calling g_graphics.init()...\n");
     g_graphics.init();
+    fprintf(stderr, "[DEBUG] g_graphics.init() done\n");
     g_drawPool.init(graphicalContext->getSpriteSize());
+    fprintf(stderr, "[DEBUG] g_drawPool.init() done\n");
 
     // fire first resize event
+    fprintf(stderr, "[DEBUG] Firing first resize: %dx%d\n", g_window.getSize().width(), g_window.getSize().height());
     resize(g_window.getSize());
+    fprintf(stderr, "[DEBUG] First resize done\n");
 
 #ifdef FRAMEWORK_SOUND
     // initialize sound
+    fprintf(stderr, "[DEBUG] Calling g_sounds.init()...\n");
     g_sounds.init();
+    fprintf(stderr, "[DEBUG] g_sounds.init() done\n");
 #endif
 
     m_mapProcessFrameCounter.init();
     m_graphicFrameCounter.init();
+    fprintf(stderr, "[DEBUG] GraphicalApplication::init() DONE\n");
 }
 
 void GraphicalApplication::deinit()

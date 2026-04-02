@@ -176,11 +176,16 @@ static void glfwScrollCallback(GLFWwindow*, double /*xoffset*/, double yoffset) 
     g_cocoaWindowInstance->fireInputEvent(ev);
 }
 
-static void glfwWindowSizeCallback(GLFWwindow*, int width, int height) {
+static void glfwFramebufferSizeCallback(GLFWwindow*, int width, int height) {
+    fprintf(stderr, "[DEBUG] glfwFramebufferSizeCallback: %dx%d\n", width, height);
     if (!g_cocoaWindowInstance) return;
-    // width/height are screen coords; multiply by backing scale for pixel coords
-    float scale = g_cocoaWindowInstance->getDisplayDensity();
-    g_cocoaWindowInstance->resize(TSize<int>((int)(width * scale), (int)(height * scale)));
+    g_cocoaWindowInstance->onFramebufferResize(TSize<int>(width, height));
+}
+
+static void glfwWindowSizeCallback(GLFWwindow*, int width, int height) {
+    fprintf(stderr, "[DEBUG] glfwWindowSizeCallback: %dx%d\n", width, height);
+    if (!g_cocoaWindowInstance) return;
+    g_cocoaWindowInstance->onWindowResize(TSize<int>(width, height));
 }
 
 static void glfwWindowFocusCallback(GLFWwindow*, int focused) {
@@ -206,18 +211,18 @@ CocoaWindow::~CocoaWindow()
 
 void CocoaWindow::init()
 {
+    fprintf(stderr, "[DEBUG] CocoaWindow::init() START\n");
     g_cocoaWindowInstance = this;
 
     if (!glfwInit()) {
+        fprintf(stderr, "[DEBUG] glfwInit() FAILED\n");
         g_logger.fatal("GLFW: glfwInit() failed");
         return;
     }
+    fprintf(stderr, "[DEBUG] glfwInit() OK\n");
 
-    // Don't force 3.2 Core, as OTClient uses legacy OpenGL 2.1 features/shaders.
-    // On macOS, asking for nothing usually gives 2.1 with full extensions.
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_RED_BITS,   8);
     glfwWindowHint(GLFW_GREEN_BITS, 8);
@@ -227,62 +232,72 @@ void CocoaWindow::init()
     glfwWindowHint(GLFW_RESIZABLE,  GLFW_TRUE);
     glfwWindowHint(GLFW_FOCUSED,    GLFW_TRUE);
     glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);  // Start hidden, show() will make visible
 
+    fprintf(stderr, "[DEBUG] Creating GLFW window...\n");
     GLFWwindow* glfwWin = glfwCreateWindow(800, 600, "OTClient", nullptr, nullptr);
     if (!glfwWin) {
-        const char* description;
-        int code = glfwGetError(&description);
-        g_logger.fatal("GLFW: glfwCreateWindow() failed (Code: {}, Desc: {})", code, description ? description : "N/A");
-        
-        // Fallback: try without any version hints
+        fprintf(stderr, "[DEBUG] OpenGL 2.1 window failed, trying 3.2 Core...\n");
         glfwDefaultWindowHints();
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
         glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
-        glfwWin = glfwCreateWindow(800, 600, "OTClient (Fallback)", nullptr, nullptr);
-        if(!glfwWin) {
-             g_logger.fatal("GLFW: Fallback window creation also failed.");
-             glfwTerminate();
-             return;
-        }
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        glfwWin = glfwCreateWindow(800, 600, "OTClient (Core)", nullptr, nullptr);
     }
 
-    glfwMakeContextCurrent(glfwWin);
+    if (!glfwWin) {
+        fprintf(stderr, "[DEBUG] ALL window creation attempts FAILED\n");
+        g_logger.fatal("GLFW: Could not create window.");
+        return;
+    }
+    fprintf(stderr, "[DEBUG] GLFW window created OK\n");
 
-    // Retina scale factor
+    glfwMakeContextCurrent(glfwWin);
+    m_window = (void*)glfwWin;
+    fprintf(stderr, "[DEBUG] GL context made current\n");
+
+    // Initial Retina scale factor and sizes
     int fbW, fbH, winW, winH;
     glfwGetFramebufferSize(glfwWin, &fbW, &fbH);
     glfwGetWindowSize(glfwWin, &winW, &winH);
+    
     m_displayDensity = (winW > 0) ? (float)fbW / (float)winW : 1.0f;
-
+    if (m_displayDensity < 1.0f) m_displayDensity = 1.0f;
     m_size = TSize<int>(fbW, fbH);
 
-    // Verify context via manually fetched proc address (safer on modern macOS)
+    fprintf(stderr, "[DEBUG] Window: %dx%d, FB: %dx%d, Density: %.1f\n", winW, winH, fbW, fbH, m_displayDensity);
+    g_logger.info("GLFW: Window size: {}x{}, Framebuffer: {}x{}, Density: {}", winW, winH, fbW, fbH, m_displayDensity);
+
+    // Verify context
     typedef const GLubyte* (*PFN_glGetString)(GLenum);
     PFN_glGetString p_glGetString = (PFN_glGetString)glfwGetProcAddress("glGetString");
-    
     if (p_glGetString) {
         const char* renderer = (const char*)p_glGetString(GL_RENDERER);
         const char* version  = (const char*)p_glGetString(GL_VERSION);
+        fprintf(stderr, "[DEBUG] GL Renderer: %s, Version: %s\n", renderer ? renderer : "NULL", version ? version : "NULL");
         if (renderer && version) {
             g_logger.info("GLFW/OpenGL: Renderer: {}, Version: {}", renderer, version);
-        } else {
-            g_logger.error("GLFW/OpenGL: glGetString(PROC) returned NULL!");
         }
     } else {
-        g_logger.error("GLFW/OpenGL: Could not get proc address for glGetString!");
+        fprintf(stderr, "[DEBUG] Could not get glGetString proc!\n");
     }
 
     // Register GLFW callbacks
+    fprintf(stderr, "[DEBUG] Registering GLFW callbacks...\n");
     glfwSetKeyCallback(glfwWin, glfwKeyCallback);
     glfwSetCharCallback(glfwWin, glfwCharCallback);
     glfwSetMouseButtonCallback(glfwWin, glfwMouseButtonCallback);
     glfwSetCursorPosCallback(glfwWin, glfwCursorPosCallback);
     glfwSetScrollCallback(glfwWin, glfwScrollCallback);
+    glfwSetFramebufferSizeCallback(glfwWin, glfwFramebufferSizeCallback);
     glfwSetWindowSizeCallback(glfwWin, glfwWindowSizeCallback);
     glfwSetWindowFocusCallback(glfwWin, glfwWindowFocusCallback);
     glfwSetWindowCloseCallback(glfwWin, glfwWindowCloseCallback);
 
-    m_window = (void*)glfwWin;
-    m_visible = true;
+    fprintf(stderr, "[DEBUG] CocoaWindow::init() DONE\n");
 }
 
 void CocoaWindow::terminate()
@@ -300,26 +315,64 @@ void CocoaWindow::move(const TPoint<int>& pos)
 {
     if (!m_window) return;
     float scale = m_displayDensity > 0 ? m_displayDensity : 1.0f;
-    glfwSetWindowPos((GLFWwindow*)m_window, (int)(pos.x / scale), (int)(pos.y / scale));
+    
+    // pos is pixels; glfw needs points
+    int winX = (int)(pos.x / scale);
+    int winY = (int)(pos.y / scale);
+    
+    // Clamp to non-negative to avoid invisible windows off-screen
+    if (winX < 0) winX = 0;
+    if (winY < 0) winY = 0;
+    
+    glfwSetWindowPos((GLFWwindow*)m_window, winX, winY);
 }
 
 void CocoaWindow::resize(const TSize<int>& size)
 {
     if (!m_window) return;
+    if (size.width() <= 0 || size.height() <= 0) return;
+    
     m_size = size;
     float scale = m_displayDensity > 0 ? m_displayDensity : 1.0f;
     glfwSetWindowSize((GLFWwindow*)m_window, (int)(size.width() / scale), (int)(size.height() / scale));
 }
 
+void CocoaWindow::onFramebufferResize(const TSize<int>& size)
+{
+    fprintf(stderr, "[DEBUG] onFramebufferResize: %dx%d\n", size.width(), size.height());
+    if (size.width() <= 0 || size.height() <= 0) return;
+    m_size = size;
+    if (m_onResize) {
+        fprintf(stderr, "[DEBUG] Calling m_onResize...\n");
+        m_onResize(size);
+        fprintf(stderr, "[DEBUG] m_onResize returned OK\n");
+    }
+}
+
+void CocoaWindow::onWindowResize(const TSize<int>& size)
+{
+    fprintf(stderr, "[DEBUG] onWindowResize: %dx%d\n", size.width(), size.height());
+    if (!m_window || size.width() <= 0) return;
+    
+    // Recalculate density based on window coords vs framebuffer
+    int fbW, fbH;
+    glfwGetFramebufferSize((GLFWwindow*)m_window, &fbW, &fbH);
+    m_displayDensity = (float)fbW / (float)size.width();
+    if (m_displayDensity < 1.0f) m_displayDensity = 1.0f;
+}
+
 void CocoaWindow::show()
 {
-    if (!m_window) return;
+    fprintf(stderr, "[DEBUG] CocoaWindow::show()\n");
+    if (!m_window) { fprintf(stderr, "[DEBUG] show() - NO WINDOW!\n"); return; }
     glfwShowWindow((GLFWwindow*)m_window);
     m_visible = true;
+    fprintf(stderr, "[DEBUG] show() done, visible=true\n");
 }
 
 void CocoaWindow::hide()
 {
+    fprintf(stderr, "[DEBUG] CocoaWindow::hide()\n");
     if (!m_window) return;
     glfwHideWindow((GLFWwindow*)m_window);
     m_visible = false;
@@ -333,6 +386,7 @@ void CocoaWindow::maximize()
 
 void CocoaWindow::poll()
 {
+    if (!m_window) return;
     glfwPollEvents();
 }
 

@@ -45,6 +45,9 @@ public:
     void poll() override;
     void swapBuffers() override;
     void makeCurrent() override;
+
+    void onFramebufferResize(const TSize<int>& size);
+    void onWindowResize(const TSize<int>& size);
     void showMouse() override;
     void hideMouse() override;
 

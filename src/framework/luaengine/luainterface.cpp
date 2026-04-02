@@ -700,7 +700,7 @@ int LuaInterface::luaCollectCppFunction(lua_State* L_STATE)
 {
     auto* const funcPtr = static_cast<LuaCppFunctionPtr*>(lua_touserdata(L_STATE, 1));
     if (funcPtr) {
-        funcPtr->reset();
+        funcPtr->~LuaCppFunctionPtr();
         --g_lua.m_totalFuncRefs;
     }
     return 0;

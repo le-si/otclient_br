@@ -1,0 +1,14 @@
+test_asio.cpp:5:35: error: expected ';' after expression
+    5 |     asio::ip::tcp::resolver::query query("localhost", "80");
+      |                                   ^
+      |                                   ;
+test_asio.cpp:5:30: error: no member named 'query' in 'asio::ip::basic_resolver<asio::ip::tcp>'
+    5 |     asio::ip::tcp::resolver::query query("localhost", "80");
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~^
+test_asio.cpp:5:36: error: use of undeclared identifier 'query'
+    5 |     asio::ip::tcp::resolver::query query("localhost", "80");
+      |                                    ^
+test_asio.cpp:6:28: error: use of undeclared identifier 'query'
+    6 |     resolver.async_resolve(query, [](const std::error_code& error, auto results) {
+      |                            ^
+4 errors generated.
