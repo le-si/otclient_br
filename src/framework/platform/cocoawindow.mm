@@ -306,14 +306,39 @@ void CocoaWindow::init()
         NSOpenGLPFADepthSize, 24,
         NSOpenGLPFADoubleBuffer,
         NSOpenGLPFAAccelerated,
+        NSOpenGLPFANoRecovery,
+        NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersionLegacy,
         0
     };
 
     NSOpenGLPixelFormat* pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
+    if (!pixelFormat) {
+        g_logger.error("Failed to create NSOpenGLPixelFormat with Legacy profile, trying default...");
+        NSOpenGLPixelFormatAttribute fallBackAttrs[] = {
+            NSOpenGLPFAColorSize, 24,
+            NSOpenGLPFAAlphaSize, 8,
+            NSOpenGLPFADoubleBuffer,
+            0
+        };
+        pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:fallBackAttrs];
+    }
+
     NSOpenGLContext* glContext = [[NSOpenGLContext alloc] initWithFormat:pixelFormat shareContext:nil];
+    if (!glContext) {
+        g_logger.fatal("Unable to create NSOpenGLContext");
+    }
 
     [glContext setView:view];
     [glContext makeCurrentContext];
+    [glContext update];
+
+    // Verify context
+    const char* renderer = (const char*)glGetString(GL_RENDERER);
+    if (!renderer) {
+        g_logger.error("OpenGL context made current but glGetString(GL_RENDERER) is NULL!");
+    } else {
+        g_logger.info("Cocoa: OpenGL context initialized. Renderer: {}", renderer);
+    }
 
     m_window = (void*)window;
     m_view = (void*)view;
@@ -364,6 +389,9 @@ void CocoaWindow::resize(const TSize<int>& size)
     frame.size.height = size.height();
     [window setFrame:frame display:YES];
     m_size = size;
+
+    NSOpenGLContext* glContext = (__bridge NSOpenGLContext*)m_glContext;
+    [glContext update];
 }
 
 void CocoaWindow::show()
@@ -400,6 +428,7 @@ void CocoaWindow::poll()
 void CocoaWindow::swapBuffers()
 {
     NSOpenGLContext* glContext = (__bridge NSOpenGLContext*)m_glContext;
+    [glContext makeCurrentContext];
     [glContext flushBuffer];
 }
 
