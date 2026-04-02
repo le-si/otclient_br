@@ -48,6 +48,11 @@ public:
 
     void onFramebufferResize(const TSize<int>& size);
     void onWindowResize(const TSize<int>& size);
+    
+    // Public wrappers for protected base class key processing
+    void handleKeyDown(Fw::Key keyCode) { processKeyDown(keyCode); }
+    void handleKeyUp(Fw::Key keyCode) { processKeyUp(keyCode); }
+    
     void showMouse() override;
     void hideMouse() override;
 
@@ -67,7 +72,12 @@ public:
 
     void fireInputEvent(const InputEvent& event) { if(m_onInputEvent) m_onInputEvent(event); }
     void fireCloseRequest() { if(m_onClose) m_onClose(); }
-    InputEvent& getInputEvent() { return m_inputEvent; }
+    
+    // Input processing helpers (used by GLFW callbacks)
+    void fireTextInput(const std::string& text);
+    void processMouseButton(Fw::MouseButton button, bool pressed, uint8_t mods);
+    void processMouseMove(const TPoint<int>& newPos);
+    void processMouseWheel(Fw::MouseWheelDirection direction);
 
 protected:
     int internalLoadMouseCursor(const ImagePtr& image, const TPoint<int>& hotSpot) override;

@@ -113,67 +113,57 @@ static uint8_t glfwModsToFw(int mods) {
 
 static void glfwKeyCallback(GLFWwindow*, int key, int /*scancode*/, int action, int mods) {
     if (!g_cocoaWindowInstance) return;
-    if (action == GLFW_REPEAT) return;
-    InputEvent ev;
-    ev.type = (action == GLFW_PRESS) ? Fw::InputEventType::KeyDownInputEvent
-                                      : Fw::InputEventType::KeyUpInputEvent;
-    ev.keyCode = glfwKeyToFw(key);
-    ev.keyboardModifiers = glfwModsToFw(mods);
-    g_cocoaWindowInstance->fireInputEvent(ev);
+    
+    // Update modifier state on the base class inputEvent
+    // (processKeyDown/Up handles Ctrl/Alt/Shift/Meta internally)
+    
+    Fw::Key fwKey = glfwKeyToFw(key);
+    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+        g_cocoaWindowInstance->handleKeyDown(fwKey);
+    } else if (action == GLFW_RELEASE) {
+        g_cocoaWindowInstance->handleKeyUp(fwKey);
+    }
 }
 
 static void glfwCharCallback(GLFWwindow*, unsigned int codepoint) {
     if (!g_cocoaWindowInstance) return;
-    InputEvent ev;
-    ev.type = Fw::InputEventType::KeyPressInputEvent;
-    ev.keyCode = Fw::KeyUnknown;
-    ev.keyboardModifiers = Fw::KeyboardNoModifier;
-    // encode codepoint as UTF-8 in keyText
+    
+    // Filter control characters
+    if (codepoint < 32 || codepoint == 127) return;
+    
+    // Encode codepoint as UTF-8
     char buf[5] = {};
     if (codepoint < 0x80) { buf[0] = (char)codepoint; }
     else if (codepoint < 0x800) { buf[0] = 0xC0|(codepoint>>6); buf[1] = 0x80|(codepoint&0x3F); }
     else if (codepoint < 0x10000) { buf[0] = 0xE0|(codepoint>>12); buf[1] = 0x80|((codepoint>>6)&0x3F); buf[2] = 0x80|(codepoint&0x3F); }
     else { buf[0] = 0xF0|(codepoint>>18); buf[1] = 0x80|((codepoint>>12)&0x3F); buf[2] = 0x80|((codepoint>>6)&0x3F); buf[3] = 0x80|(codepoint&0x3F); }
-    ev.keyText = buf;
-    g_cocoaWindowInstance->fireInputEvent(ev);
+    
+    g_cocoaWindowInstance->fireTextInput(std::string(buf));
 }
 
 static void glfwMouseButtonCallback(GLFWwindow* win, int button, int action, int mods) {
     if (!g_cocoaWindowInstance) return;
-    InputEvent ev;
-    ev.type = (action == GLFW_PRESS) ? Fw::InputEventType::MousePressInputEvent
-                                      : Fw::InputEventType::MouseReleaseInputEvent;
-    if (button == GLFW_MOUSE_BUTTON_LEFT)   ev.mouseButton = Fw::MouseButton::MouseLeftButton;
-    else if (button == GLFW_MOUSE_BUTTON_RIGHT)  ev.mouseButton = Fw::MouseButton::MouseRightButton;
-    else if (button == GLFW_MOUSE_BUTTON_MIDDLE) ev.mouseButton = Fw::MouseButton::MouseMidButton;
+    
+    Fw::MouseButton fwButton;
+    if (button == GLFW_MOUSE_BUTTON_LEFT)   fwButton = Fw::MouseButton::MouseLeftButton;
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT)  fwButton = Fw::MouseButton::MouseRightButton;
+    else if (button == GLFW_MOUSE_BUTTON_MIDDLE) fwButton = Fw::MouseButton::MouseMidButton;
     else return;
-    double xpos, ypos;
-    glfwGetCursorPos(win, &xpos, &ypos);
-    float scale = g_cocoaWindowInstance->getDisplayDensity();
-    ev.mousePos = TPoint<int>((int)(xpos * scale), (int)(ypos * scale));
-    ev.keyboardModifiers = glfwModsToFw(mods);
-    g_cocoaWindowInstance->fireInputEvent(ev);
+    
+    g_cocoaWindowInstance->processMouseButton(fwButton, action == GLFW_PRESS, glfwModsToFw(mods));
 }
 
 static void glfwCursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
     if (!g_cocoaWindowInstance) return;
     float scale = g_cocoaWindowInstance->getDisplayDensity();
-    InputEvent ev;
-    ev.type = Fw::InputEventType::MouseMoveInputEvent;
-    ev.mousePos = TPoint<int>((int)(xpos * scale), (int)(ypos * scale));
-    ev.mouseButton = Fw::MouseButton::MouseNoButton;
-    ev.keyboardModifiers = Fw::KeyboardNoModifier;
-    g_cocoaWindowInstance->fireInputEvent(ev);
+    TPoint<int> newPos((int)(xpos * scale), (int)(ypos * scale));
+    g_cocoaWindowInstance->processMouseMove(newPos);
 }
 
-static void glfwScrollCallback(GLFWwindow*, double /*xoffset*/, double yoffset) {
+static void glfwScrollCallback(GLFWwindow* win, double /*xoffset*/, double yoffset) {
     if (!g_cocoaWindowInstance) return;
-    InputEvent ev;
-    ev.type = Fw::InputEventType::MouseWheelInputEvent;
-    ev.wheelDirection = (yoffset > 0) ? Fw::MouseWheelUp : Fw::MouseWheelDown;
-    ev.mouseButton = Fw::MouseButton::MouseNoButton;
-    ev.keyboardModifiers = Fw::KeyboardNoModifier;
-    g_cocoaWindowInstance->fireInputEvent(ev);
+    if (yoffset == 0) return;
+    g_cocoaWindowInstance->processMouseWheel(yoffset > 0 ? Fw::MouseWheelUp : Fw::MouseWheelDown);
 }
 
 static void glfwFramebufferSizeCallback(GLFWwindow*, int width, int height) {
@@ -388,6 +378,7 @@ void CocoaWindow::poll()
 {
     if (!m_window) return;
     glfwPollEvents();
+    fireKeysPress();
 }
 
 void CocoaWindow::swapBuffers()
@@ -512,6 +503,71 @@ int CocoaWindow::internalLoadMouseCursor(const ImagePtr& image, const TPoint<int
     GLFWcursor* cursor = glfwCreateCursor(&img, hotSpot.x, hotSpot.y);
     m_cursors.push_back((void*)cursor);
     return (int)m_cursors.size() - 1;
+}
+
+// ─── Input processing helpers ────────────────────────────────────────────────
+
+void CocoaWindow::fireTextInput(const std::string& text)
+{
+    if (text.empty() || !m_onInputEvent) return;
+    m_inputEvent.reset(Fw::KeyTextInputEvent);
+    m_inputEvent.keyText = text;
+    m_onInputEvent(m_inputEvent);
+}
+
+void CocoaWindow::processMouseButton(Fw::MouseButton button, bool pressed, uint8_t mods)
+{
+    m_inputEvent.reset();
+    m_inputEvent.type = pressed ? Fw::MousePressInputEvent : Fw::MouseReleaseInputEvent;
+    m_inputEvent.mouseButton = button;
+    m_inputEvent.keyboardModifiers = mods;
+    
+    // Track button state
+    if (pressed) {
+        m_mouseButtonStates |= (1u << button);
+    } else {
+        m_mouseButtonStates &= ~(1u << button);
+    }
+    
+    // Get current mouse position
+    if (m_window) {
+        double xpos, ypos;
+        glfwGetCursorPos((GLFWwindow*)m_window, &xpos, &ypos);
+        float scale = m_displayDensity > 0 ? m_displayDensity : 1.0f;
+        m_inputEvent.mousePos = TPoint<int>((int)(xpos * scale), (int)(ypos * scale));
+    }
+    
+    if (m_onInputEvent)
+        m_onInputEvent(m_inputEvent);
+}
+
+void CocoaWindow::processMouseMove(const TPoint<int>& newPos)
+{
+    m_inputEvent.reset();
+    m_inputEvent.type = Fw::MouseMoveInputEvent;
+    m_inputEvent.mouseMoved = newPos - m_inputEvent.mousePos;
+    m_inputEvent.mousePos = newPos;
+    if (m_onInputEvent)
+        m_onInputEvent(m_inputEvent);
+}
+
+void CocoaWindow::processMouseWheel(Fw::MouseWheelDirection direction)
+{
+    m_inputEvent.reset();
+    m_inputEvent.type = Fw::MouseWheelInputEvent;
+    m_inputEvent.mouseButton = Fw::MouseMidButton;
+    m_inputEvent.wheelDirection = direction;
+    
+    // Include current mouse position
+    if (m_window) {
+        double xpos, ypos;
+        glfwGetCursorPos((GLFWwindow*)m_window, &xpos, &ypos);
+        float scale = m_displayDensity > 0 ? m_displayDensity : 1.0f;
+        m_inputEvent.mousePos = TPoint<int>((int)(xpos * scale), (int)(ypos * scale));
+    }
+    
+    if (m_onInputEvent)
+        m_onInputEvent(m_inputEvent);
 }
 
 #endif
