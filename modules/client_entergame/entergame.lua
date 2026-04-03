@@ -183,7 +183,7 @@ function EnterGame.init()
     local clientVersion = g_settings.getInteger('client-version')
 
     if not clientVersion or clientVersion == 0 then
-        clientVersion = 860
+        clientVersion = 1500
     end
 
     if not port or port == 0 then
@@ -260,6 +260,22 @@ function EnterGame.init()
             g_configs.saveSettings()
         end
     })
+
+    enterGame:getChildById('accountNameTextEdit').onTextChange = function(self, text)
+        if enterGame:getChildById('rememberEmailBox'):isChecked() then
+            local host = enterGame:getChildById('serverHostTextEdit'):getText()
+            ServerList.setServerAccount(host, text)
+            ServerList.save()
+        end
+    end
+
+    enterGame:getChildById('accountPasswordTextEdit').onTextChange = function(self, text)
+        if enterGame:getChildById('rememberEmailBox'):isChecked() then
+            local host = enterGame:getChildById('serverHostTextEdit'):getText()
+            ServerList.setServerPassword(host, text)
+            ServerList.save()
+        end
+    end
 
     if Servers_init and next(Servers_init) ~= nil then
         local server = Servers_init[host]
@@ -786,6 +802,13 @@ function EnterGame.doLogin()
     g_settings.set('host', G.host)
     g_settings.set('port', G.port)
     g_settings.set('client-version', clientVersion)
+
+    local rememberEmailBox = enterGame:getChildById('rememberEmailBox')
+    if rememberEmailBox:isChecked() then
+        ServerList.setServerAccount(G.host, G.account)
+        ServerList.setServerPassword(G.host, G.password)
+        ServerList.save()
+    end
 
     if clientVersion >= 1281 and G.port ~= 7171 then
         EnterGame.tryHttpLogin(clientVersion, httpLogin)

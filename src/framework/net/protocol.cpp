@@ -53,7 +53,9 @@ Protocol::~Protocol()
 #ifndef __EMSCRIPTEN__
 void Protocol::connect(const std::string_view host, const uint16_t port)
 {
+    fprintf(stderr, "[DEBUG] Protocol::connect(%.*s, %d) START\n", (int)host.size(), host.data(), port);
     if (host == "proxy" || host == "0.0.0.0" || (host == "127.0.0.1" && g_proxy.isActive())) {
+        fprintf(stderr, "[DEBUG] Protocol::connect - using proxy\n");
         m_disconnected = false;
         m_proxy = g_proxy.addSession(port,
                                      [capture0 = asProtocol()](auto&& PH1) {
@@ -65,20 +67,26 @@ void Protocol::connect(const std::string_view host, const uint16_t port)
         return onConnect();
     }
 
+    fprintf(stderr, "[DEBUG] Protocol::connect - creating Connection\n");
     m_connection = std::make_shared<Connection>();
+    fprintf(stderr, "[DEBUG] Protocol::connect - Connection created\n");
     std::weak_ptr<Protocol> weakSelf = asProtocol();
     m_connection->setErrorCallback([weakSelf](auto&& err) {
+        fprintf(stderr, "[DEBUG] Protocol - error callback: %s\n", err.message().c_str());
         if (auto self = weakSelf.lock()) {
             self->onError(std::forward<decltype(err)>(err));
         }
     });
+    fprintf(stderr, "[DEBUG] Protocol::connect - calling m_connection->connect()\n");
     m_connection->connect(host, port, [weakSelf] {
+        fprintf(stderr, "[DEBUG] Protocol - connect callback fired\n");
         if (auto self = weakSelf.lock()) {
             if (!self->m_disconnected) {
                 self->onConnect();
             }
         }
     });
+    fprintf(stderr, "[DEBUG] Protocol::connect() DONE\n");
 }
 #else
 void Protocol::connect(const std::string_view host, uint16_t port, bool gameWorld)
@@ -373,15 +381,21 @@ void Protocol::xteaEncrypt(const OutputMessagePtr& outputMessage) const
     }
 }
 
-void Protocol::onConnect() { callLuaField("onConnect"); }
+void Protocol::onConnect() {
+    fprintf(stderr, "[DEBUG] Protocol::onConnect() - calling Lua onConnect\n");
+    callLuaField("onConnect");
+    fprintf(stderr, "[DEBUG] Protocol::onConnect() DONE\n");
+}
 
 void Protocol::onRecv(const InputMessagePtr& inputMessage)
 {
+    fprintf(stderr, "[DEBUG] Protocol::onRecv()\n");
     callLuaField("onRecv", inputMessage);
 }
 
 void Protocol::onError(const std::error_code& err)
 {
+    fprintf(stderr, "[DEBUG] Protocol::onError(%s, %d)\n", err.message().c_str(), err.value());
     callLuaField("onError", err.message(), err.value());
     disconnect();
 }

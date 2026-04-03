@@ -102,30 +102,45 @@ void LoginHttp::httpLogin(const std::string& host, const std::string& path,
                           const std::string& password, int request_id, bool httpLogin, const std::string& token) {
 #ifndef __EMSCRIPTEN__
     this->errorMessage.clear();
+    struct MainThreadReleaser {
+        std::shared_ptr<LoginHttp> ptr;
+        MainThreadReleaser(std::shared_ptr<LoginHttp> p) : ptr(std::move(p)) {}
+        MainThreadReleaser(const MainThreadReleaser&) = default;
+        MainThreadReleaser(MainThreadReleaser&&) = default;
+        MainThreadReleaser& operator=(const MainThreadReleaser&) = default;
+        MainThreadReleaser& operator=(MainThreadReleaser&&) = default;
+        ~MainThreadReleaser() {
+            if (ptr && ptr.use_count() == 1) {
+                g_dispatcher.addEvent([p = std::move(ptr)] {});
+            }
+        }
+    };
+
     g_asyncDispatcher.detach_task(
-        [this, host, path, port, email, password, request_id, token, httpLogin] {
-        if (cancelled.load()) return;
+        [keepAlive = MainThreadReleaser(std::static_pointer_cast<LoginHttp>(shared_from_this())), host, path, port, email, password, request_id, token, httpLogin] {
+        auto self = keepAlive.ptr;
+        if (self->cancelled.load()) return;
         httplib::Result result =
-            this->loginHttpsJson(host, path, port, email, password, token);
+            self->loginHttpsJson(host, path, port, email, password, token);
         if (httpLogin && (!result || result->status != Success)) {
-            if (cancelled.load()) return;
-            result = loginHttpJson(host, path, port, email, password, token);
+            if (self->cancelled.load()) return;
+            result = self->loginHttpJson(host, path, port, email, password, token);
         }
 
-        if (result && result->status == Success && parseJsonResponse(result->body)) {
-            g_dispatcher.addEvent([this, request_id] {
-                if (cancelled.load()) return;
+        if (result && result->status == Success && self->parseJsonResponse(result->body)) {
+            g_dispatcher.addEvent([self, request_id] {
+                if (self->cancelled.load()) return;
                 g_lua.callGlobalField("EnterGame", "loginSuccess", request_id,
-                this->getSession(), this->getWorldList(),
-                this->getCharacterList());
+                self->getSession(), self->getWorldList(),
+                self->getCharacterList());
             });
         } else {
             int status = 0;
             std::string msg = "";
             if (result) {
                 status = result->status;
-                if (!this->errorMessage.empty()) {
-                    msg = this->errorMessage;
+                if (!self->errorMessage.empty()) {
+                    msg = self->errorMessage;
                 }
                 try {
                     const auto body = json::parse(result->body);
@@ -143,23 +158,23 @@ void LoginHttp::httpLogin(const std::string& host, const std::string& path,
                         } else {
                             msg += " - Unknown status";
                         }
-                    } else if (!this->errorMessage.empty()) {
-                        msg = this->errorMessage;
+                    } else if (!self->errorMessage.empty()) {
+                        msg = self->errorMessage;
                     } else {
                         msg = "Invalid response received from server (expected JSON).";
                     }
                 }
             } else {
                 status = -1;
-                if (this->errorMessage.length() == 0) {
+                if (self->errorMessage.length() == 0) {
                     msg = "Failed to connect to login server.";
                 } else {
-                    msg = this->errorMessage;
+                    msg = self->errorMessage;
                 }
             }
 
-            g_dispatcher.addEvent([this, request_id, status, msg] {
-                if (cancelled.load()) return;
+            g_dispatcher.addEvent([self, request_id, status, msg] {
+                if (self->cancelled.load()) return;
                 g_lua.callGlobalField("EnterGame", "loginFailed", request_id, msg,
                 status);
             });
@@ -168,7 +183,8 @@ void LoginHttp::httpLogin(const std::string& host, const std::string& path,
 #else
     this->errorMessage.clear();
     g_asyncDispatcher.detach_task(
-        [this, host, path, port, email, password, request_id, token, httpLogin] {
+        [keepAlive = MainThreadReleaser(std::static_pointer_cast<LoginHttp>(shared_from_this())), host, path, port, email, password, request_id, token, httpLogin] {
+        auto self = keepAlive.ptr;
         emscripten_fetch_attr_t attr;
         emscripten_fetch_attr_init(&attr);
         strcpy(attr.requestMethod, "POST");
@@ -203,23 +219,23 @@ void LoginHttp::httpLogin(const std::string& host, const std::string& path,
             fetch = emscripten_fetch(&attr, url.c_str());
         }
 
-        if (cancelled.load()) {
+        if (self->cancelled.load()) {
             emscripten_fetch_close(fetch);
             return;
         }
         if (fetch && fetch->status == 200 &&
-               !parseJsonResponse(std::string(fetch->data, fetch->numBytes))) {
+               !self->parseJsonResponse(std::string(fetch->data, fetch->numBytes))) {
             fetch->status = -1;
         }
 
         emscripten_fetch_close(fetch);
-        if (cancelled.load()) return;
+        if (self->cancelled.load()) return;
         if (fetch && fetch->status == 200) {
-            g_dispatcher.addEvent([this, request_id] {
-                if (cancelled.load()) return;
+            g_dispatcher.addEvent([self, request_id] {
+                if (self->cancelled.load()) return;
                 g_lua.callGlobalField("EnterGame", "loginSuccess", request_id,
-                this->getSession(), this->getWorldList(),
-                this->getCharacterList());
+                self->getSession(), self->getWorldList(),
+                self->getCharacterList());
             });
         } else {
             int status = 0;
@@ -229,14 +245,14 @@ void LoginHttp::httpLogin(const std::string& host, const std::string& path,
             } else {
                 status = -1;
             }
-            if (this->errorMessage.length() == 0) {
+            if (self->errorMessage.length() == 0) {
                 msg = "Unknown error";
             } else {
-                msg = this->errorMessage;
+                msg = self->errorMessage;
             }
 
-            g_dispatcher.addEvent([this, request_id, status, msg] {
-                if (cancelled.load()) return;
+            g_dispatcher.addEvent([self, request_id, status, msg] {
+                if (self->cancelled.load()) return;
                 g_lua.callGlobalField("EnterGame", "loginFailed", request_id, msg,
                 status);
             });

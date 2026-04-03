@@ -11,6 +11,9 @@ function translateNetworkError(errcode, connecting, errdesc)
     else
         text = tr('Your connection has been lost.\nEither your network or the server went down.')
     end
-    text = text .. ' ' .. tr('(ERROR %d)', errcode)
+    if errdesc and errdesc ~= "" then
+        text = text .. '\n' .. tr('Details: %s', errdesc)
+    end
+    text = text .. '\n' .. tr('(ERROR %d)', errcode)
     return text
 end

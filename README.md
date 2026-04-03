@@ -1,12 +1,11 @@
 
 <h1>
-  <img src="https://github.com/mehah/otclient/blob/main/data/images/clienticon.png?raw=true" width="32" alt="logo"/>
+  <img src="https://github.com/le-si/otclient_br/blob/main/data/images/clienticon.png?raw=true" width="32" alt="logo"/>
   OTClient - Redemption
 </h1>
 
-[![Discord Shield](https://discordapp.com/api/guilds/888062548082061433/widget.png?style=shield)](https://discord.gg/tUjTBZzMCy)
-[![Build - Ubuntu](https://github.com/mehah/otclient/actions/workflows/build-ubuntu.yml/badge.svg)](https://github.com/mehah/otclient/actions/workflows/build-ubuntu.yml)
-[![Build - Windows](https://github.com/mehah/otclient/actions/workflows/build-windows.yml/badge.svg)](https://github.com/mehah/otclient/actions/workflows/build-windows.yml)
+[![Build - Ubuntu](https://github.com/le-si/otclient_br/actions/workflows/build-ubuntu.yml/badge.svg)](https://github.com/le-si/otclient_br/actions/workflows/build-ubuntu.yml)
+[![Build - Windows](https://github.com/le-si/otclient_br/actions/workflows/build-windows.yml/badge.svg)](https://github.com/le-si/otclient_br/actions/workflows/build-windows.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -23,6 +22,39 @@
 9. 💯 [Support Protocol](#support-protocol)
 10. ©️ [License](#license)
 11. ❤️ [Contributors](#contributors)
+12. ⚙️ [Configuration](#configuration)
+
+---
+
+## <a id="configuration"></a>⚙️ Configuration
+
+### `init.lua` Server Setup
+To connect the client to a server, you must configure the `Servers_init` table in the [init.lua](./init.lua) file.
+
+#### 🌐 Modern Servers (Protocol 12+ / Canary)
+Modern servers typically use an HTTP endpoint for the character list.
+```lua
+Servers_init = {
+    ["https://192.168.100.26/login.php"] = {
+        port = 443,
+        protocol = 1500,
+        httpLogin = true,      -- Required for HTTPS/Web Login
+        useAuthenticator = false
+    }
+}
+```
+
+#### 🔌 Legacy Servers (TFS / 8.60)
+Older servers use the standard binary protocol on port 7171.
+```lua
+Servers_init = {
+    ["192.168.100.26"] = {
+        port = 7171,
+        protocol = 860,
+        httpLogin = false      -- Standard binary login
+    }
+}
+```
 
 ---
 
@@ -462,31 +494,6 @@ If it doesn't work, enable **curl**:
 |---------|---------|---------|
 | <video src="https://github.com/kokekanon/otclient.readme/assets/114332266/4547907a-8eb9-42f5-b445-901cb5270509" width="200" controls></video> | <video src="https://github.com/kokekanon/otclient.readme/assets/114332266/0bb4739f-e902-4370-85dc-e796564aac8e" width="200" controls></video> | <video src="https://github.com/kokekanon/otclient.readme/assets/114332266/95db3fa1-a793-4ab7-86a3-e21a8543a23c" width="200" controls></video> |
 
-#### 💸 Sponsored (Features)
-- **Bot V8** — ([@luanluciano93](https://github.com/luanluciano93), [@SkullzOTS](https://github.com/SkullzOTS), [@kokekanon](https://github.com/kokekanon), [@FranciskoKing](https://github.com/FranciskoKing), [@Kizuno18](https://github.com/Kizuno18))  
-  - Adapted **85%**  
-  - [VS Solution](https://github.com/mehah/otclient/blob/68e4e1b94c2041bd235441244156e6477058250c/vc17/settings.props#L9) / [CMAKE](https://github.com/mehah/otclient/blob/68e4e1b94c2041bd235441244156e6477058250c/src/CMakeLists.txt#L13)
-
-- **Shader with Framebuffer** — ([@SkullzOTS](https://github.com/SkullzOTS), [@Mryukiimaru](https://github.com/Mryukiimaru), [@JeanTheOne](https://github.com/JeanTheOne), [@KizaruHere](https://github.com/KizaruHere))
-
-<p align="center">
-<table>
-<tr>
-<td><img src="https://github.com/kokekanon/OTredemption-Picture-NODELETE/blob/main/Picture/Shader/Framebuffer/001_creature.gif?raw=true" width="200"></td>
-<td><img src="https://github.com/kokekanon/OTredemption-Picture-NODELETE/blob/main/Picture/Shader/Framebuffer/002_items.gif?raw=true" width="200"></td>
-<td><img src="https://github.com/kokekanon/OTredemption-Picture-NODELETE/blob/main/Picture/Shader/Framebuffer/003_UICreature.gif?raw=true" width="110"></td>
-</tr>
-<tr>
-<td align="center">Creature</td>
-<td align="center">Items</td>
-<td align="center">UICreature</td>
-</tr>
-</table>
-</p>
-
-- **Full Cyclopedia** — ([@luanluciano93](https://github.com/luanluciano93), [@kokekanon](https://github.com/kokekanon), [@MUN1Z](https://github.com/MUN1Z), [@qatari](https://github.com/qatari))
-
-- **Wheel of Destiny** — (R!ck, ZLukSrT#8740, Christianlb, [@andreoam](https://github.com/andreoam), [@Libergod](https://github.com/libergod))
 
 #### 🔦 OTClient V8 (Features)
 - Lighting System  
@@ -506,7 +513,7 @@ This is a fork of edubart's OTClient. The objective of this fork is to develop a
 
 **Tasks**
 - [x] Compile on Android devices
-- [ ] Compile on Apple devices
+- [x] Compile on Apple devices ✅ (Tested on Apple M1)
 - [ ] Adapt the UI reusing the existing LUA code
 
 **Current compiling tutorials**
@@ -515,7 +522,33 @@ This is a fork of edubart's OTClient. The objective of this fork is to develop a
 ---
 
 ## <a id="compiling"></a>🔨 Compiling
-If you are interested in compiling this project, visit the **[Wiki](https://github.com/mehah/otclient/wiki)**.
+If you are interested in compiling this project, visit the **[Wiki](https://github.com/mehah/otclient/wiki)** for standard Linux/Windows builds.
+
+### 🍎 macOS Compilation
+The macOS port has been newly stabilized and **extensively tested on Apple M1 (Apple Silicon)**. It utilizes **GLFW** to replace the legacy `NSOpenGL` system, ensuring compatibility with modern macOS versions.
+
+#### 🔧 Requirements
+Install the required dependencies via **Homebrew**:
+```bash
+brew install glfw asio nlohmann-json fmt utf8cpp pugixml openssl glew luajit pkg-config
+```
+
+#### 🏗️ Build Steps
+1. Create a build directory:
+   ```bash
+   mkdir build && cd build
+   ```
+2. Configure with CMake:
+   ```bash
+   cmake ..
+   ```
+3. Compile using all available cores:
+   ```bash
+   make -j$(sysctl -n hw.ncpu)
+   ```
+
+#### 💡 Troubleshooting
+If you experience a crash on startup or a missing login box, ensure that your `data/things/` directory contains a folder named after your target protocol (e.g., `1500`) containing the required `.dat` and `.spr` assets.
 
 ---
 
