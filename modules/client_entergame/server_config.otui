@@ -1,0 +1,100 @@
+ServerConfigWindow < MainWindow
+  !text: tr('Primary Server Configuration')
+  size: 300 360
+
+  Label
+    id: warningLabel
+    !text: tr('No assets detected! Please copy your .dat and .spr folders to /data/things/.')
+    color: #ff3333
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    text-wrap: true
+    text-auto-resize: true
+    margin-bottom: 10
+    visible: false
+
+  Label
+    !text: tr('Server Address:')
+    anchors.top: warningLabel.bottom
+    anchors.left: parent.left
+    margin-top: 10
+
+  TextEdit
+    id: hostTextEdit
+    anchors.top: prev.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 2
+
+  Label
+    !text: tr('Port:')
+    anchors.top: prev.bottom
+    anchors.left: parent.left
+    margin-top: 10
+
+  TextEdit
+    id: portTextEdit
+    anchors.top: prev.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 2
+
+  Label
+    !text: tr('Client Version:')
+    anchors.top: prev.bottom
+    anchors.left: parent.left
+    margin-top: 10
+
+  ComboBox
+    id: protocolComboBox
+    anchors.top: prev.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 2
+
+  CheckBox
+    id: httpLoginCheckBox
+    !text: tr('Use HTTP Login (Recommendation for Canary)')
+    anchors.top: prev.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 15
+
+  Button
+    id: openFinderButton
+    !text: tr('Open Assets Folder')
+    !tooltip: tr('Opens /data/things/ in Finder. You should copy all "assets" here.')
+    anchors.top: prev.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 15
+    @onClick: EnterGame.openAssetsFolder()
+
+  Button
+    id: resetButton
+    !text: tr('Reset')
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+    width: 60
+    @onClick: EnterGame.resetToDefaults()
+
+  Button
+    id: saveButton
+    !text: tr('Save and Continue')
+    anchors.bottom: parent.bottom
+    anchors.right: cancelButton.left
+    margin-right: 5
+    width: 130
+    @onClick: EnterGame.saveServerConfig()
+
+  Button
+    id: cancelButton
+    !text: tr('Cancel')
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    width: 60
+    @onClick: EnterGame.closeServerConfig()
+
+ServerConfigWindow
+  id: serverConfigWindow

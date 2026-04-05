@@ -144,14 +144,16 @@ ticks_t Platform::getFileModificationTime(std::string file)
 
 bool Platform::openUrl(std::string url, bool now)
 {
-    if(url.find("http://") == std::string::npos && url.find("https://") == std::string::npos)
+    if(url.find("http://") == std::string::npos && 
+       url.find("https://") == std::string::npos &&
+       url.find("file://") == std::string::npos)
         url.insert(0, "http://");
 
     const auto& action = [url] {
 #if defined(__APPLE__)
-        return system(fmt::format("open {}", url).c_str()) == 0;
+        return system(fmt::format("open '{}'", url).c_str()) == 0;
 #else
-        return system(fmt::format("xdg-open {}", url).c_str()) == 0;
+        return system(fmt::format("xdg-open '{}'", url).c_str()) == 0;
 #endif
     };
 
@@ -166,7 +168,11 @@ bool Platform::openUrl(std::string url, bool now)
 bool Platform::openDir(std::string path, bool now)
 {
     const auto& action = [path] {
-        return system(fmt::format("xdg-open {}", path).c_str()) == 0;
+#if defined(__APPLE__)
+        return system(fmt::format("open '{}'", path).c_str()) == 0;
+#else
+        return system(fmt::format("xdg-open '{}'", path).c_str()) == 0;
+#endif
     };
 	
     if(now)

@@ -20,6 +20,20 @@ ServerListButton < UIButton
   $disabled:
     image-color: #ffffff55
 
+SettingsButton < UIButton
+  size: 17 17
+  image-source: /images/topbuttons/options
+  image-color: #ffffffff
+
+  $hover !disabled:
+    image-color: #ffffff99
+
+  $pressed:
+    image-color: #ffffff44
+
+  $disabled:
+    image-color: #ffffff55
+
 EnterGameWindow
   id: enterGame
   &authenticatorEnabled: false
@@ -61,8 +75,8 @@ EnterGameWindow
 
   QtCheckBox
     id: rememberEmailBox
-    !text: tr('Remember password')
-    !tooltip: tr('Remember account and password when starts client')
+    !text: tr('Remember account')
+    !tooltip: tr('Remember account/email when client starts')
     anchors.left: passwordLabel.left
     anchors.right: parent.right
     anchors.top: accountPasswordTextEdit.bottom
@@ -133,12 +147,21 @@ EnterGameWindow
     margin-top: 8
     text-auto-resize: true
 
-  ServerListButton
-    id: serverListButton
-    !tooltip: tr('Server list')
+  SettingsButton
+    id: settingsButton
+    !tooltip: tr('Server configuration')
     anchors.right: parent.right
     anchors.top: serverLabel.bottom
     margin-top: 3
+    @onClick: EnterGame.openServerConfig()
+
+  ServerListButton
+    id: serverListButton
+    !tooltip: tr('Server list')
+    anchors.right: settingsButton.left
+    anchors.top: serverLabel.bottom
+    margin-top: 3
+    margin-right: 3
     @onClick: EnterGame.showServerList()
 
   TextEdit

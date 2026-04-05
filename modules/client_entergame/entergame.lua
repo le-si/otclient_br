@@ -19,6 +19,7 @@ local motdEnabled = true
 local tokenWindow
 local authErrorBox
 local hasAttemptedAuthenticator = false
+local serverConfigWindow = nil
 
 -- private functions
 local function onError(protocol, message, errorCode)
@@ -77,22 +78,16 @@ local function onCharacterList(protocol, characters, account, otui)
 
     if enterGame:getChildById('rememberEmailBox'):isChecked() then
         local account = g_crypt.encrypt(G.account)
-        local password = g_crypt.encrypt(G.password)
-
         g_settings.set('account', account)
-        g_settings.set('password', password)
 
         ServerList.setServerAccount(G.host, G.account)
-        ServerList.setServerPassword(G.host, G.password)
         ServerList.setServerAutologin(G.host, enterGame:getChildById('autoLoginBox'):isChecked())
 
         g_settings.set('autologin', enterGame:getChildById('autoLoginBox'):isChecked())
         ServerList.save()
     else
-        -- reset server list account/password
         ServerList.setServerAccount(G.host, '')
-        ServerList.setServerPassword(G.host, '')
-
+        ServerList.save()
         EnterGame.clearAccountFields()
     end
 
@@ -147,12 +142,12 @@ end
 local function updateLabelText()
     if enterGame:getChildById('clientComboBox') and tonumber(enterGame:getChildById('clientComboBox'):getText()) > 1080 then
         enterGame:setText("Journey Onwards")
-        enterGame:getChildById('emailLabel'):setText("Email:")
-        enterGame:getChildById('rememberEmailBox'):setText("Remember Email:")
+        enterGame:getChildById('emailLabel'):setText("E-mail:")
+        enterGame:getChildById('rememberEmailBox'):setText("Remember e-mail:")
     else
         enterGame:setText("Enter Game")
         enterGame:getChildById('emailLabel'):setText("Acc Name:")
-        enterGame:getChildById('rememberEmailBox'):setText("Remember password:")
+        enterGame:getChildById('rememberEmailBox'):setText("Remember account:")
     end
 end
 
@@ -164,7 +159,124 @@ local function loadServerListModule()
     end
 end
 
--- public functions
+function EnterGame.openServerConfig()
+    if not serverConfigWindow then
+        serverConfigWindow = g_ui.displayUI('server_config')
+    end
+
+    if not serverConfigWindow then
+        print("Error: Could not load server_config.otui!")
+        return
+    end
+
+    local host = g_settings.get('host')
+    local port = g_settings.get('port')
+    local httpLogin = g_settings.getBoolean('httpLogin')
+    local clientVersion = g_settings.getInteger('client-version')
+
+    serverConfigWindow:getChildById('hostTextEdit'):setText(host)
+    serverConfigWindow:getChildById('portTextEdit'):setText(port)
+    serverConfigWindow:getChildById('httpLoginCheckBox'):setChecked(httpLogin)
+
+    local clientBox = serverConfigWindow:getChildById('protocolComboBox')
+    clientBox:clearOptions()
+    
+    local installedClients = {}
+    local amountInstalledClients = 0
+    for _, dirItem in ipairs(g_resources.listDirectoryFiles('/data/things/')) do
+        if tonumber(dirItem) and tonumber(dirItem) > 0 then
+            table.insert(installedClients, tonumber(dirItem))
+            amountInstalledClients = amountInstalledClients + 1
+        end
+    end
+
+    if amountInstalledClients > 0 then
+        table.sort(installedClients)
+        for _, proto in ipairs(installedClients) do
+            clientBox:addOption(proto)
+        end
+        clientBox:setCurrentOption(clientVersion)
+        serverConfigWindow:getChildById('warningLabel'):setVisible(false)
+    else
+        serverConfigWindow:getChildById('warningLabel'):setVisible(true)
+        clientBox:addOption(clientVersion)
+    end
+
+    serverConfigWindow:show()
+    serverConfigWindow:raise()
+    serverConfigWindow:focus()
+end
+
+function EnterGame.saveServerConfig()
+    local host = serverConfigWindow:getChildById('hostTextEdit'):getText()
+    local port = serverConfigWindow:getChildById('portTextEdit'):getText()
+    local protocol = tonumber(serverConfigWindow:getChildById('protocolComboBox'):getText())
+    local httpLogin = serverConfigWindow:getChildById('httpLoginCheckBox'):isChecked()
+
+    g_settings.set('host', host)
+    g_settings.set('port', port)
+    g_settings.set('client-version', protocol)
+    g_settings.set('httpLogin', httpLogin)
+    g_settings.set('configInitialPromptAsked', true)
+
+    -- Update the main login window fields
+    enterGame:getChildById('serverHostTextEdit'):setText(host)
+    enterGame:getChildById('serverPortTextEdit'):setText(port)
+    enterGame:getChildById('clientComboBox'):setCurrentOption(protocol)
+    enterGame:getChildById('httpLoginBox'):setChecked(httpLogin)
+
+    serverConfigWindow:destroy()
+    serverConfigWindow = nil
+    
+    g_configs.saveSettings()
+    displayInfoBox(tr('Saved'), tr('Server configuration updated successfully!'))
+end
+
+function EnterGame.resetToDefaults()
+    local host = ""
+    local port = 7171
+    local protocol = 1500
+    local httpLogin = true
+
+    if Servers_init and next(Servers_init) ~= nil then
+        local hostInit, valuesInit = next(Servers_init)
+        host = hostInit
+        port = valuesInit.port
+        protocol = valuesInit.protocol
+        httpLogin = valuesInit.httpLogin
+    end
+
+    if serverConfigWindow then
+        serverConfigWindow:getChildById('hostTextEdit'):setText(host)
+        serverConfigWindow:getChildById('portTextEdit'):setText(port)
+        serverConfigWindow:getChildById('httpLoginCheckBox'):setChecked(httpLogin)
+        serverConfigWindow:getChildById('protocolComboBox'):setCurrentOption(protocol)
+    end
+end
+
+function EnterGame.openAssetsFolder()
+    -- Use g_resources.getRealPath to get the absolute host path for the resource folder
+    -- If it's not found in search paths, we fall back to the WorkDir relative path
+    local path = g_resources.getRealPath("/data/")
+    if not path or #path == 0 or path == "/data/" then
+        path = g_resources.getWorkDir() .. "data/"
+    end
+
+    if path and #path > 0 then
+        -- The engine handles quotes and file:// prefix prepending if needed
+        -- However, we pass file:// explicitly to be sure
+        g_platform.openUrl("file://" .. path)
+    else
+        displayErrorBox(tr('Error'), tr('Could not determine assets path!'))
+    end
+end
+
+function EnterGame.closeServerConfig()
+    if serverConfigWindow then
+        serverConfigWindow:destroy()
+        serverConfigWindow = nil
+    end
+end
 function EnterGame.init()
     enterGame = g_ui.displayUI('entergame')
     Keybind.new("Misc.", "Change Character", "Ctrl+G", "")
@@ -194,7 +306,7 @@ function EnterGame.init()
     local serverData = servers[host] or {}
     if serverData and serverData.account then
         EnterGame.setAccountName(serverData.account)
-        EnterGame.setPassword(serverData.password)
+        EnterGame.setPassword('') -- Never restore password
         enterGame:getChildById('rememberEmailBox'):setChecked(true)
     else
         EnterGame.setAccountName('')
@@ -243,16 +355,13 @@ function EnterGame.init()
         onCheckChange = function(self, checked)
             local host = enterGame:getChildById('serverHostTextEdit'):getText()
             local account = enterGame:getChildById('accountNameTextEdit'):getText()
-            local password = enterGame:getChildById('accountPasswordTextEdit'):getText()
 
             if checked and #account > 0 then
                 ServerList.setServerAccount(host, account)
-                ServerList.setServerPassword(host, password)
                 ServerList.setServerAutologin(host, enterGame:getChildById('autoLoginBox'):isChecked() or false)
                 g_settings.set('host', host)
             else
                 ServerList.setServerAccount(host, '')
-                ServerList.setServerPassword(host, '')
                 ServerList.setServerAutologin(host, false)
             end
 
@@ -270,11 +379,7 @@ function EnterGame.init()
     end
 
     enterGame:getChildById('accountPasswordTextEdit').onTextChange = function(self, text)
-        if enterGame:getChildById('rememberEmailBox'):isChecked() then
-            local host = enterGame:getChildById('serverHostTextEdit'):getText()
-            ServerList.setServerPassword(host, text)
-            ServerList.save()
-        end
+        -- Do nothing, never save password
     end
 
     if Servers_init and next(Servers_init) ~= nil then
@@ -307,6 +412,20 @@ function EnterGame.init()
 
     if g_app.isRunning() and not g_game.isOnline() then
         enterGame:show()
+    end
+
+    if not g_settings.getBoolean('configInitialPromptAsked', false) then
+        local yesCallback = function()
+            g_settings.set('configInitialPromptAsked', true)
+            EnterGame.openServerConfig()
+        end
+        local noCallback = function()
+            g_settings.set('configInitialPromptAsked', true)
+        end
+        displayGeneralBox(tr('Initial Setup'), tr('Do you want to configure local and remote server?'), {
+            { text = tr('Yes'), callback = yesCallback },
+            { text = tr('No'), callback = noCallback }
+        }, yesCallback, noCallback)
     end
 end
 
